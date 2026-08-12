@@ -1,0 +1,101 @@
+#!/bin/bash
+# ARC setup — create or refresh the virtualenv. Safe to run at any time.
+#
+#   bin/arc-setup              # after a clone, and after any pull that touched deps
+#   bin/arc-setup --recreate   # delete .venv and build it again from scratch
+#
+# This exists because ARC is developed on one Mac and used on another, so `git pull` has
+# to be the whole story. Dependencies live in pyproject.toml under the `all` extra, and
+# this script is what turns that file into a working environment on either machine.
+#
+# It is idempotent. Running it when nothing has changed re-checks everything, installs
+# nothing, and takes a couple of seconds.
+#
+# Self-locating: resolves the repo from this script's real path, so it works through a
+# symlink and from any directory.
+
+set -euo pipefail
+
+SRC="${BASH_SOURCE[0]}"
+while [ -h "$SRC" ]; do
+  DIR="$(cd -P "$(dirname "$SRC")" && pwd)"
+  SRC="$(readlink "$SRC")"
+  [[ $SRC != /* ]] && SRC="$DIR/$SRC"
+done
+ROOT="$(cd -P "$(dirname "$SRC")/.." && pwd)"
+
+RECREATE=0
+if [ $# -gt 0 ]; then
+  if [ "$1" = "--recreate" ]; then
+    RECREATE=1
+  else
+    echo "usage: arc-setup [--recreate]" >&2
+    exit 2
+  fi
+fi
+
+# Python 3.12 specifically: pyproject requires >=3.12, and the venv should not silently
+# drift to whatever `python3` happens to mean on a new machine.
+BASE_PY=""
+for candidate in /opt/homebrew/opt/python@3.12/bin/python3.12 "$(command -v python3.12 || true)"; do
+  if [ -n "$candidate" ] && [ -x "$candidate" ]; then BASE_PY="$candidate"; break; fi
+done
+if [ -z "$BASE_PY" ]; then
+  echo "arc-setup: python3.12 not found." >&2
+  echo "  install it:  brew install python@3.12" >&2
+  exit 1
+fi
+
+if [ "$RECREATE" = "1" ] && [ -d "$ROOT/.venv" ]; then
+  echo "removing existing .venv"
+  rm -rf "$ROOT/.venv"
+fi
+
+if [ ! -x "$ROOT/.venv/bin/python" ]; then
+  echo "creating .venv with $($BASE_PY -V)"
+  # --prompt so the shell shows `(ARC)` rather than the directory name, `.venv`, which
+  # would put a stray dot in the prompt.
+  "$BASE_PY" -m venv "$ROOT/.venv" --prompt ARC
+else
+  echo "reusing .venv ($("$ROOT/.venv/bin/python" -V 2>&1))"
+fi
+
+# Homebrew's Python ships a broken activate template: it wraps the prompt in parentheses
+# that the substituted value already carries, so the prompt comes out as `((ARC) )`.
+# Rewriting that one line is the fix. This lives here rather than in a note because the
+# patch is inside .venv, which is gitignored, so it is lost on every recreate.
+# Matching on `PS1="("` means a second run finds nothing to do.
+if grep -q 'PS1="("' "$ROOT/.venv/bin/activate"; then
+  sed -i '' 's|^\( *\)PS1="(".*|\1PS1="${VIRTUAL_ENV_PROMPT:-}${PS1:-}"|' "$ROOT/.venv/bin/activate"
+  echo "patched .venv/bin/activate (prompt would otherwise read '((ARC) )')"
+fi
+
+# `[all]` composes every extra this machine runs — see pyproject.toml. Adding a
+# dependency there is all it takes for the other Mac to pick it up on the next run.
+echo "installing dependencies from pyproject.toml [all] …"
+"$ROOT/.venv/bin/python" -m pip install --quiet --upgrade pip
+"$ROOT/.venv/bin/pip" install --quiet -e "$ROOT[all]"
+
+echo
+echo "environment ready:  $("$ROOT/.venv/bin/python" -V 2>&1), $("$ROOT/.venv/bin/pip" list 2>/dev/null | wc -l | tr -d ' ') packages"
+
+# Everything below is machine-local state that git cannot carry. Reported rather than
+# fixed: creating symlinks and writing secrets on someone's behalf is not this script's
+# business, and a missing key should be a visible decision rather than a silent default.
+NOTES=0
+if [ ! -e "$ROOT/config/secrets.yaml" ] && [ -z "${GEMINI_API_KEY:-}" ]; then
+  echo "  todo: config/secrets.yaml is missing (gitignored). ARC cannot speak without"
+  echo "        'gemini_api_key: <key>' there, or GEMINI_API_KEY in the environment."
+  NOTES=1
+fi
+if ! command -v ARC >/dev/null 2>&1; then
+  echo "  todo: the ARC launcher is not on PATH. To add it:"
+  echo "          mkdir -p ~/.local/bin && ln -s '$ROOT/bin/ARC' ~/.local/bin/ARC"
+  echo "        and make sure ~/.local/bin is on PATH in ~/.zshrc."
+  NOTES=1
+fi
+if [ "$NOTES" = "0" ]; then
+  echo "  nothing else to do."
+fi
+echo
+echo "next:  .venv/bin/arc doctor     # checks macOS permissions and model weights"

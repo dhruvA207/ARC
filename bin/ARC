@@ -33,8 +33,7 @@ ROOT="$(cd -P "$(dirname "$SRC")/.." && pwd)"
 PY="$ROOT/.venv/bin/python"
 if [ ! -x "$PY" ]; then
   echo "ARC: no virtualenv at $ROOT/.venv" >&2
-  echo "  create it:  cd '$ROOT' && python3.12 -m venv .venv \\" >&2
-  echo "              && .venv/bin/pip install -e '.[mlx,voice,app,camera,dev]'" >&2
+  echo "  create it:  $ROOT/bin/arc-setup" >&2
   exit 1
 fi
 
