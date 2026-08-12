@@ -56,9 +56,62 @@ voice:
   # which is why this is a list to add to deliberately rather than `all`. The local
   # backend is unaffected — it reaches every tool through ARC's own model, as always.
   live_tools:
+    # Camera gestures — the user's hand steering, ARC only watching.
     - enable_camera_gestures
     - disable_camera_gestures
     - camera_gestures_status
+
+    # Applications. Opening one is the first step of nearly every screen task, and
+    # without these the only route was driving Spotlight by keystroke.
+    - open_app
+    - quit_app
+    - list_applications
+    - frontmost_app
+
+    # Messaging. send_message drafts on the first call and only sends when called
+    # again with confirm=true, so ARC cannot send anything on its own — see
+    # policy.confirmation.require_for_sending.
+    - send_message
+    - read_conversation
+    - list_conversations
+    - open_messages
+
+    # Screen control — ARC operating the machine itself. A real escalation: with these
+    # a model running on Google's hardware can see this screen and drive the pointer.
+    # The safeguards are the ones already built for exactly this: nothing moves until
+    # start_screen_control raises the glow, moving the physical mouse ends it instantly,
+    # and `arc-kill` or the abort phrase stops everything.
+    - start_screen_control
+    - stop_screen_control
+    - screen_control_status
+
+    # Reading the screen, so it can find what it is about to click rather than guess.
+    - screenshot
+    - screen_layout
+    - read_screen_elements
+    - read_screen_text
+    - find_on_screen
+    - pointer_location
+
+    # Driving it.
+    - mouse_move
+    - mouse_click
+    - mouse_drag
+    - mouse_scroll
+    - keyboard_type
+    - keyboard_press
+
+  # Stop feeding the microphone to Gemini while ARC is talking.
+  #
+  # There is no echo cancellation on this path, so on speakers the microphone hears the
+  # reply, and the Live API's activity detection is deliberately eager — ARC's own
+  # voice reads as you interrupting, and it cuts itself off mid-word. Suppressing the
+  # input while it speaks is the same trade the Apple backend already makes.
+  #
+  # The cost is that interrupting BY VOICE stops working: use the mic toggle or Escape.
+  # On headphones there is no echo path, so setting this to false gets voice barge-in
+  # back with nothing to lose.
+  echo_suppression: true
 
   # Rests muted. The microphone is never opened at startup; ⌘S in the web UI (or
   # `arc voice listen`) is what opens it, and every session is written to the audit log.

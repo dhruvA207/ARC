@@ -26,7 +26,7 @@ from typing import Any, Literal
 from arc import __version__
 from arc.audit import AuditLogger, KillSwitch
 from arc.config import Config
-from arc.errors import ArcError, ConfigError
+from arc.errors import ArcError, ConfigError, ControlError
 from arc.hardware import ModelSizing, refresh
 from arc.log import get_logger
 from arc.paths import arc_home, audit_dir, config_dir, ensure_runtime_dirs, log_dir, run_dir
@@ -791,7 +791,91 @@ def cmd_control(args: argparse.Namespace) -> int:
         print("done")
         return 0
 
+    if args.control_command == "test":
+        return _control_test(args)
+
     raise ConfigError(f"unknown control subcommand {args.control_command!r}")
+
+
+def _control_test(args: argparse.Namespace) -> int:
+    """Drive the pointer through a square and report what actually happened.
+
+    ``demo`` only proves the indicator appears. This proves the whole path: the session
+    opens, synthetic events land where they were aimed, and control is given back. Each
+    move is verified by reading the pointer position afterwards rather than assumed,
+    because a silently-ignored event looks exactly like a successful one.
+
+    Deliberately moves and scrolls but never clicks or types: a click lands on whatever
+    happens to be under the pointer, and a keystroke goes into whatever has focus.
+    """
+    import time
+
+    from arc.control import input as control_input
+    from arc.control import session as control_session
+    from arc.vision.capture import displays
+
+    found = displays()
+    if not found:
+        print("no displays detected", file=sys.stderr)
+        return 1
+    primary = next((d for d in found if d["primary"]), found[0])
+    cx = primary["x"] + primary["width"] / 2
+    cy = primary["y"] + primary["height"] / 2
+    reach = min(primary["width"], primary["height"]) * 0.2
+
+    corners = [
+        ("up-left", cx - reach, cy - reach),
+        ("up-right", cx + reach, cy - reach),
+        ("down-right", cx + reach, cy + reach),
+        ("down-left", cx - reach, cy + reach),
+        ("centre", cx, cy),
+    ]
+
+    print("Taking control — the blue glow should appear on every display.")
+    print("Keep your hands off the mouse: touching it ends the session on purpose.\n")
+
+    start = control_session.pointer_position()
+    control_session.start(reason="control self-test", audit=_audit_logger(config_or_none(args)))
+    passed = 0
+    try:
+        for name, x, y in corners:
+            try:
+                control_input.move_to(x, y)
+            except ControlError as exc:
+                print(f"  {name:11} — stopped: {exc}")
+                print("\nThat is the takeover guarantee working, not a failure.")
+                return 0
+
+            landed = control_session.pointer_position() or (0.0, 0.0)
+            drift = max(abs(landed[0] - x), abs(landed[1] - y))
+            ok = drift < 2.0
+            passed += ok
+            print(
+                f"  {name:11} aimed ({x:.0f}, {y:.0f})  landed ({landed[0]:.0f}, {landed[1]:.0f})"
+                f"  {'ok' if ok else f'OFF BY {drift:.0f}px'}"
+            )
+            time.sleep(0.25)
+
+        control_input.scroll(-2)
+        print(f"  {'scroll':11} sent 2 lines")
+    finally:
+        control_session.stop("self-test finished")
+        if start is not None:
+            # Put the pointer back where it was found, so the test leaves no trace.
+            with contextlib.suppress(Exception):
+                control_session.start(reason="restoring the pointer", overlay=False)
+                control_input.move_to(*start, smooth=False)
+                control_session.stop("pointer restored")
+
+    time.sleep(0.3)
+    leftover = subprocess.run(
+        ["/usr/bin/pgrep", "-f", "arc.control.overlay"], capture_output=True, text=True, check=False
+    ).stdout.split()
+
+    print(f"\n{passed}/{len(corners)} moves landed on target")
+    print(f"glow cleared: {'no — ' + ', '.join(leftover) if leftover else 'yes'}")
+    print(f"control released: {'no' if control_session.current() else 'yes'}")
+    return 0 if passed == len(corners) and not leftover else 1
 
 
 def config_or_none(args: argparse.Namespace) -> Config | None:
@@ -1212,6 +1296,7 @@ def _build_parser() -> argparse.ArgumentParser:
     control_sub.add_parser("status", help="is ARC controlling the mouse and keyboard?")
     control_sub.add_parser("release", help="take control back immediately")
     control_sub.add_parser("demo", help="show the control indicator for five seconds")
+    control_sub.add_parser("test", help="drive the pointer through a square and verify every step")
 
     ui = sub.add_parser("ui", help="open ARC in its own window (starts the server too)")
     ui.add_argument("--port", type=int, default=None, help="port for the local server")

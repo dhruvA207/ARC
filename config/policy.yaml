@@ -44,6 +44,19 @@ confirmation:
   require_for_shell: false
   require_for_deletes: false
 
+  # Sending is the exception, and it is a setting rather than a rule so it stays
+  # yours to change.
+  #
+  # Everything else ARC does to this machine can be looked at afterwards and undone.
+  # A sent message cannot: it is gone, it went to another person, and no amount of
+  # kill switch gets it back. So `send_message` drafts into the conversation and stops,
+  # and only sends when it is called again with confirm=true — which in practice means
+  # ARC reads the message back and you say yes.
+  #
+  # Set this to false and it sends without asking. Nothing in the code hard-codes the
+  # gate; this value is the whole of it.
+  require_for_sending: true
+
 audit:
   # Whether a failure to write the audit log should stop the action. True: an
   # unlogged action is worse than a refused one, because it breaks debugging.

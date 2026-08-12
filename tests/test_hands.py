@@ -17,8 +17,7 @@ import pytest
 
 from arc.vision.hands.fusion import (
     CONF_AGREED,
-    CONF_FRONT,
-    CONF_SIDE_ONLY,
+    CONF_SINGLE,
     DEFAULT_MIN_CONF,
     Depth,
     Fuser,
@@ -172,20 +171,22 @@ def test_the_front_camera_survives_the_side_camera_disagreeing() -> None:
     assert confidence >= DEFAULT_MIN_CONF, "a contested front-camera reading must still act"
 
 
-def test_one_camera_is_trusted_whichever_role_it_holds() -> None:
-    """Unplugging the webcam left only the built-in camera, which holds the `side` role.
+def test_either_camera_alone_is_enough_to_act() -> None:
+    """The cameras do not cover the same volume, so a hand often reaches only one.
 
-    Scoring that as "side-only" discounted it below the action threshold, so fist and
-    pinch stopped working the moment the C920 was unplugged — while the cursor carried
-    on, because it reads a view's raw hands and never passes through fusion. The
-    discount is about a head-on camera failing to corroborate, not about the label.
+    Discounting the side camera meant most frames of a perfectly good fist scored below
+    the bar — and because the roles are only config labels, unplugging the webcam left
+    the built-in camera holding the `side` role and killed fist and pinch outright
+    while the cursor carried on, since it never passes through fusion.
     """
-    _gesture, confidence, _agreed = score(None, _reading("fist"), dual=False)
-    assert confidence >= DEFAULT_MIN_CONF
+    for front, side in ((_reading("fist"), None), (None, _reading("fist"))):
+        gesture, confidence, _agreed = score(front, side)
+        assert gesture == "fist"
+        assert confidence == CONF_SINGLE >= DEFAULT_MIN_CONF
 
 
 def test_a_single_camera_fist_reaches_the_caller() -> None:
-    fuser = Fuser(dual=False)
+    fuser = Fuser()
     hands: list[dict] = []
     for _ in range(fuser.confirm_solo):
         hands = fuser.fuse({}, {"Right": _reading("fist")})
@@ -193,21 +194,13 @@ def test_a_single_camera_fist_reaches_the_caller() -> None:
 
 
 def test_nothing_seen_scores_nothing() -> None:
-    assert score(None, None, dual=False) == (None, 0.0, False)
-
-
-def test_a_hand_only_the_side_camera_sees_is_ignored() -> None:
-    """With BOTH cameras running, a head-on view that saw nothing is real evidence
-    against an edge-on detection — usually a spurious one."""
-    _gesture, confidence, _agreed = score(None, _reading("fist"), dual=True)
-    assert confidence == CONF_SIDE_ONLY
-    assert confidence < DEFAULT_MIN_CONF
+    assert score(None, None) == (None, 0.0, False)
 
 
 def test_a_single_camera_setup_still_acts() -> None:
     """Unplugging the side camera must degrade, not disable."""
     _gesture, confidence, _agreed = score(_reading("fist"), None)
-    assert confidence == CONF_FRONT >= DEFAULT_MIN_CONF
+    assert confidence == CONF_SINGLE >= DEFAULT_MIN_CONF
 
 
 def test_contested_fist_reaches_the_caller() -> None:

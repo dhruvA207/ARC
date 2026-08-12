@@ -9,9 +9,12 @@ safeguards are the audit log, the kill switch, and ``--dry-run``.
 """
 
 from arc.tools import (  # noqa: F401 - imported for registration
+    apps,
     camera,
+    control,
     filesystem,
     input_control,
+    messaging,
     screen,
     shell,
     web,

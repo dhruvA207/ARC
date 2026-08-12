@@ -71,10 +71,12 @@ def _running() -> list[int]:
 
 @tool(category="camera", mutating=True)
 def enable_camera_gestures(mouse: bool = True, preview: bool = True) -> str:
-    """Turn on the camera gesture feature, so hands in front of the camera control
-    windows and the mouse. Call this for "enable camera function", "turn on the camera
-    feature", "turn on camera gestures", "enable hand tracking", "start gesture
-    control", or "let me control the screen with my hands".
+    """Turn on the camera gesture feature, so the USER's own hands in front of the
+    camera steer windows and the mouse. Call this only for "enable camera function",
+    "turn on the camera feature", "turn on camera gestures", "enable hand tracking", or
+    "start gesture control" — all of which are about a camera watching a hand. This is
+    NOT how ARC controls the screen itself: for "control my screen" or "take over my
+    screen", call start_screen_control instead.
 
     Once on, with your hand in view of the camera:
       - a closed fist grabs the frontmost window and moves it

@@ -550,10 +550,20 @@ The original code already called the front camera "the authority on WHAT the han
 doing" and then let the side camera veto it. This resolves that contradiction in favour
 of the stated intent.
 
-**Consequence.** `camera.fusion.min_conf` must stay at or below 0.8, the front camera's
-score. Raising it above that disables fist and pinch again, which is why the config says
-so at the value. A single-camera setup is unaffected and fully supported; the second
-camera now only adds confirmation speed and the depth estimate.
+**Consequence.** `camera.fusion.min_conf` must stay at or below 0.8. Raising it above
+that disables fist and pinch again, which is why the config says so at the value. A
+single-camera setup is unaffected and fully supported; the second camera only adds
+confirmation speed and the depth estimate.
+
+**Amended.** The principle first kept one exception — a hand only the *side* camera
+could see was still discounted, on the theory that a head-on view seeing nothing was
+evidence against it. That was wrong for the same reason the original was. The two
+cameras do not cover the same volume, so a hand reaching only one of them is ordinary,
+and most frames of a good fist scored below the bar. Worse, the roles are only config
+labels: unplugging the webcam left the built-in camera holding the `side` role and
+disabled fist and pinch outright, while cursor control carried on because it reads raw
+hands and never passes through fusion — the identical symptom, a third time. Any camera
+that sees the hand now scores 0.8; `Gate` supplies the specificity.
 
 **Not a control session.** Camera gestures deliberately do *not* run inside an ARC
 control session, and `arc/vision/hands/cursor.py` exists rather than reusing

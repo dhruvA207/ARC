@@ -22,12 +22,18 @@ foreshortened, so the side view dissented almost every frame and neither gesture
 committed. Cursor control kept working only because it read one camera's raw hands and
 never went through this path at all — which is exactly the shape of the bug report.
 
-So agreement now *accelerates* a gesture rather than gating it. The front camera is the
-authority on what the hand is doing, because it is the one the hands are pointed at,
-and a reading it is confident about survives the side camera's dissent; the side camera
-still slows that reading down via :class:`Gate`, and still owns depth. A hand only the
-side camera can see stays below the bar, which is the one case where the geometry
-really is unreliable.
+So agreement *accelerates* a gesture rather than gating it. Any camera that sees the
+hand is enough to act on; agreement raises the score and shortens how long the gesture
+must be held, and when the views disagree the front one wins because it is the one the
+hands are pointed at.
+
+That principle had one exception at first — a hand only the side camera could see was
+still discounted — and the exception was wrong for the same reason the original was.
+The two cameras do not cover the same volume: one sits on the monitor and the other is
+in the laptop, so a hand visible to only one of them is ordinary. Worse, the roles are
+just config labels, so unplugging the webcam left the built-in camera holding the
+*side* role and disabled fist and pinch entirely while cursor control carried on. The
+exception is gone; :class:`Gate` supplies the specificity instead.
 """
 
 from __future__ import annotations
@@ -40,12 +46,18 @@ SIDE = "side"
 
 #: Confidence when both views agree — the strongest evidence available.
 CONF_AGREED = 1.0
-#: Confidence when the front view sees the hand and the side view dissents or is
-#: absent. Above :data:`DEFAULT_MIN_CONF` on purpose: see the module docstring.
-CONF_FRONT = 0.8
-#: Confidence when only the side view sees the hand. Below the bar — an edge-on
-#: reading with nothing to check it against is the case worth discarding.
-CONF_SIDE_ONLY = 0.5
+
+#: Confidence when one view sees the hand, whichever view that is. Above
+#: :data:`DEFAULT_MIN_CONF` on purpose, so a gesture only one camera can see still acts.
+#:
+#: This started lower for the side camera alone, on the theory that a head-on view
+#: which saw nothing was evidence against an edge-on detection. In practice the two
+#: cameras point at different volumes — one sits on the monitor, the other is in the
+#: laptop — so a hand being visible to only one of them is ordinary, not suspicious.
+#: Discounting it meant most frames of a perfectly good fist scored below the bar.
+#: Specificity comes from :class:`Gate` instead, which makes an uncorroborated gesture
+#: hold for more frames before it commits.
+CONF_SINGLE = 0.8
 
 DEFAULT_MIN_CONF = 0.7
 
@@ -128,41 +140,26 @@ class Depth:
 
 
 def score(
-    front: dict[str, Any] | None,
-    side: dict[str, Any] | None,
-    *,
-    dual: bool = True,
+    front: dict[str, Any] | None, side: dict[str, Any] | None
 ) -> tuple[str | None, float, bool]:
     """Return ``(gesture, confidence, agreed)`` for one hand seen by either view.
 
-    Args:
-        front: The head-on view's reading, or None if it did not see this hand.
-        side: The edge-on view's reading, or None.
-        dual: Whether two cameras are actually running. This is about the *setup*, not
-            about which views saw the hand this frame.
-
-    ``dual`` is load-bearing. A side-only reading is discounted because a head-on
-    camera was watching and did not corroborate it, which usually means a spurious
-    detection. With one camera running there is nothing suspicious about it being the
-    only source — it is simply the evidence available, and which role the config
-    happens to label it is irrelevant. Scoring it low anyway meant unplugging the
-    webcam silently disabled fist and pinch while the cursor kept working, because the
-    cursor reads a view's raw hands and never comes through here.
+    Any camera that sees the hand is evidence enough to act on. Agreement raises the
+    score and, through :class:`Gate`, shortens how long the gesture must be held — it
+    never decides whether the gesture counts. When the two views disagree the front one
+    wins, because it is the one the hands are pointed at.
     """
     front_gesture = front["g"]["gesture"] if front else None
     side_gesture = side["g"]["gesture"] if side else None
 
-    if not dual:
-        seen = front if front is not None else side
-        gesture = front_gesture if front is not None else side_gesture
-        return (gesture, CONF_FRONT, False) if seen is not None else (None, 0.0, False)
-
     if front is not None and side is not None:
         agreed = front_gesture == side_gesture
-        return front_gesture, (CONF_AGREED if agreed else CONF_FRONT), agreed
+        return front_gesture, (CONF_AGREED if agreed else CONF_SINGLE), agreed
     if front is not None:
-        return front_gesture, CONF_FRONT, False
-    return side_gesture, CONF_SIDE_ONLY, False
+        return front_gesture, CONF_SINGLE, False
+    if side is not None:
+        return side_gesture, CONF_SINGLE, False
+    return None, 0.0, False
 
 
 class Fuser:
@@ -176,11 +173,7 @@ class Fuser:
         confirm_solo: int = 5,
         depth_ema: float = 0.15,
         depth_dead: float = 0.01,
-        dual: bool = True,
     ) -> None:
-        #: Whether two cameras are running. See :func:`score` — with one, its reading
-        #: is the authority whichever role the config gave it.
-        self.dual = dual
         self.min_conf = min_conf
         self.confirm_agree = confirm_agree
         self.confirm_solo = confirm_solo
@@ -214,7 +207,7 @@ class Fuser:
         fused = []
         for label in set(front) | set(side):
             f, s = front.get(label), side.get(label)
-            candidate, confidence, agreed = score(f, s, dual=self.dual)
+            candidate, confidence, agreed = score(f, s)
             gesture = self._gate(label).update(candidate, agreed)
 
             base = f or s

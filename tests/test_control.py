@@ -250,3 +250,49 @@ def test_accent_is_the_documented_blue() -> None:
     red, green, blue = overlay.ACCENT
     assert blue > green > red  # unmistakably blue
     assert overlay.PEAK_ALPHA < 1.0  # ambient glow, not a painted frame
+
+
+# ── Taking control as a tool ────────────────────────────────────────────────────
+
+
+def test_input_tools_are_unreachable_until_control_is_taken() -> None:
+    """Nothing in ARC used to start a session, so every mouse and keyboard tool
+    refused — the capability existed and no agent could reach it."""
+    from arc.tools import input_control
+
+    cs.stop("test reset")
+    with pytest.raises(Exception) as caught:
+        input_control.mouse_click(10, 10)
+    assert "start_screen_control" in str(caught.value), "the refusal must say what to call"
+
+
+def test_starting_and_stopping_screen_control() -> None:
+    from arc.tools.control import screen_control_status, start_screen_control, stop_screen_control
+
+    cs.stop("test reset")
+    assert "not controlling" in screen_control_status()
+    try:
+        start_screen_control("a test")
+        assert "has screen control" in screen_control_status()
+    finally:
+        stop_screen_control()
+    assert "not controlling" in screen_control_status()
+
+
+def test_starting_twice_is_not_an_error() -> None:
+    """A model that repeats itself should get a no-op, not a failure to reason about."""
+    from arc.tools.control import start_screen_control, stop_screen_control
+
+    cs.stop("test reset")
+    try:
+        start_screen_control("a test")
+        assert "already controlling" in start_screen_control("a test")
+    finally:
+        stop_screen_control()
+
+
+def test_stopping_when_idle_is_not_an_error() -> None:
+    from arc.tools.control import stop_screen_control
+
+    cs.stop("test reset")
+    assert "not controlling" in stop_screen_control()

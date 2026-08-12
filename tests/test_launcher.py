@@ -29,9 +29,26 @@ def test_bare_arc_opens_the_app() -> None:
     assert "-m arc ui" in body
 
 
-def test_arguments_pass_straight_through() -> None:
-    """`ARC doctor` should be `arc doctor`, so this is not a second, lesser CLI."""
-    assert '-m arc "$@"' in LAUNCHER.read_text(encoding="utf-8")
+def test_it_does_nothing_but_launch() -> None:
+    """It is a launcher, not a second front door to the CLI."""
+    assert '-m arc "$@"' not in LAUNCHER.read_text(encoding="utf-8")
+
+
+def test_it_launches_detached_so_the_terminal_stays_usable() -> None:
+    """Typing `ARC` must give the prompt straight back, the way `code` does.
+
+    A foreground `exec` would hold the terminal until ARC exits, which is the thing
+    that made the launcher feel like it had taken the window hostage.
+    """
+    body = LAUNCHER.read_text(encoding="utf-8")
+    assert "nohup" in body
+    assert "exec " not in body
+    assert 'nohup "$PY" -u -m arc ui' in body
+
+
+def test_it_does_not_start_a_second_copy() -> None:
+    """Two windows would fight over the port, the microphone, and input control."""
+    assert "pgrep" in LAUNCHER.read_text(encoding="utf-8")
 
 
 def test_it_resolves_its_own_repo_through_a_symlink() -> None:
@@ -42,15 +59,20 @@ def test_it_resolves_its_own_repo_through_a_symlink() -> None:
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="the launcher is macOS-only")
-def test_it_runs_and_reports_the_version(tmp_path: Path) -> None:
-    """End to end, from an unrelated directory: the self-location has to hold."""
+def test_arguments_are_refused_rather_than_ignored(tmp_path: Path) -> None:
+    """macOS filesystems are case-insensitive, so `arc doctor` reaches this script too.
+
+    Silently opening the window instead would look like the CLI had broken, so it says
+    what it is and points at where the CLI actually lives.
+    """
     result = subprocess.run(
-        [str(LAUNCHER), "version"],
+        [str(LAUNCHER), "doctor"],
         capture_output=True,
         text=True,
         cwd=tmp_path,
-        timeout=120,
+        timeout=60,
         env={**os.environ, "ARC_HOME": str(tmp_path / "home")},
     )
-    assert result.returncode == 0, result.stderr
-    assert "arc" in result.stdout.lower()
+    assert result.returncode != 0
+    assert "only launches ARC" in result.stderr
+    assert ".venv/bin/arc doctor" in result.stderr

@@ -1,20 +1,21 @@
 #!/bin/bash
 # ARC launcher — type `ARC` in any terminal to start it.
 #
-#   ARC                 # open ARC in its own window (starts the local server too)
-#   ARC doctor          # any CLI subcommand works: doctor, serve, memory, model, ...
-#   ARC --help          # the full list
+#   ARC     # opens ARC in its own window, with the loopback server behind it
 #
-# With no arguments this runs `arc ui`, which is the app window plus the loopback
-# server in one process. With arguments it passes them straight through, so this is a
-# complete replacement for the `arc` command rather than a separate way in.
+# That is the whole of it. It launches ARC and does nothing else: no subcommands, no
+# flags, no second job. The CLI is its own thing and lives in the repo — see below.
 #
-# macOS filesystems are case-insensitive by default, so `arc` reaches this script too.
-# That is deliberate — either spelling should work.
+# It launches DETACHED, the way `code` does: the window opens, the prompt comes
+# straight back, and the terminal stays yours. ARC's output goes to the log file
+# named at the bottom of this script rather than over whatever you type next, and
+# closing the terminal does not take ARC down with it.
 #
-# It runs in the FOREGROUND on purpose. macOS grants Accessibility and Screen Recording
-# to the *launching* application, so staying a direct child of your terminal is what
-# keeps window control, screen capture, and input control working.
+# Detaching costs nothing in permissions. macOS attributes Accessibility and Screen
+# Recording to the responsible *application*, which is decided when the process is
+# spawned and inherited from the terminal that spawned it — being reparented to
+# launchd afterwards does not change it. So window control, screen capture, and input
+# control keep working exactly as they did in the foreground.
 #
 # Self-locating: resolves the repo from this script's real path, so it keeps working
 # when called through a symlink in ~/.local/bin.
@@ -37,10 +38,27 @@ if [ ! -x "$PY" ]; then
   exit 1
 fi
 
-# `python -m arc` rather than the console script: it works from a plain checkout
-# whether or not `pip install -e .` has been run.
-if [ $# -eq 0 ]; then
-  exec "$PY" -m arc ui
+# Arguments are refused rather than ignored. macOS filesystems are case-insensitive, so
+# `arc doctor` reaches this script too — silently launching the window instead would
+# look like the CLI had broken.
+if [ $# -ne 0 ]; then
+  echo "ARC takes no arguments — it only launches ARC." >&2
+  echo "  for the CLI:  $ROOT/.venv/bin/arc $*" >&2
+  exit 2
 fi
 
-exec "$PY" -m arc "$@"
+# Don't launch a second copy. Two windows would fight over the server port, the
+# microphone, and the input-control lock.
+if pgrep -f "\-m arc ui" >/dev/null 2>&1; then
+  echo "ARC is already running."
+  exit 0
+fi
+
+LOG="${ARC_HOME:-$HOME/.arc}/logs/ui.log"
+mkdir -p "$(dirname "$LOG")"
+
+# `python -m arc` rather than the console script: it works from a plain checkout
+# whether or not `pip install -e .` has been run. `-u` so the log is readable while
+# ARC is still running instead of only after it exits.
+( cd "$ROOT" && nohup "$PY" -u -m arc ui > "$LOG" 2>&1 & )
+echo "ARC launching…  (window opens shortly · log: $LOG)"

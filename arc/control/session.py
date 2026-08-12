@@ -289,8 +289,8 @@ def require() -> ControlSession:
     session = _current
     if session is None or not session.state.active:
         raise ControlError(
-            "ARC does not currently have input control. "
-            "Start a session first so the indicator is visible."
+            "ARC does not currently have input control. Call start_screen_control "
+            "first, which raises the indicator before anything moves."
         )
     session.check()
     return session

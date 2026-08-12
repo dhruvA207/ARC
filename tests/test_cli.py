@@ -138,3 +138,38 @@ def test_render_aligns_names(capsys: pytest.CaptureFixture[str]) -> None:
     _render([Check("short", "ok", "x"), Check("much-longer", "ok", "y")], as_json=False)
     lines = capsys.readouterr().out.splitlines()
     assert lines[0].index("x") == lines[1].index("y")
+
+
+# ── Testing screen control from the terminal ────────────────────────────────────
+
+
+def test_control_test_is_offered() -> None:
+    """`demo` only proves the glow appears; it never moves the pointer, so it cannot
+    tell you whether control actually works."""
+    from arc.__main__ import _build_parser
+
+    args = _build_parser().parse_args(["control", "test"])
+    assert args.control_command == "test"
+
+
+def test_control_test_never_clicks_or_types() -> None:
+    """A click lands on whatever is under the pointer and a keystroke goes into
+    whatever has focus — neither belongs in a command you run to check a feature."""
+    import inspect
+
+    from arc.__main__ import _control_test
+
+    body = inspect.getsource(_control_test)
+    assert "control_input.click" not in body
+    assert "control_input.type_text" not in body
+    assert "control_input.press" not in body
+
+
+def test_control_test_verifies_where_the_pointer_landed() -> None:
+    """A silently-ignored synthetic event looks exactly like a successful one, so the
+    landing position has to be read back rather than assumed."""
+    import inspect
+
+    from arc.__main__ import _control_test
+
+    assert "pointer_position()" in inspect.getsource(_control_test)

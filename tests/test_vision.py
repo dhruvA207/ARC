@@ -108,11 +108,32 @@ def test_element_without_a_frame_has_no_center() -> None:
     assert Element(role="AXButton", label="Ghost").center is None
 
 
-def test_actionable_requires_role_frame_and_enabled() -> None:
+def test_actionable_requires_a_frame_and_being_enabled() -> None:
     assert button("Save").actionable
     assert not button("Save", enabled=False).actionable
     assert not button("Save", frame=None).actionable
-    assert not Element(role="AXStaticText", label="Hi", frame=(0.0, 0.0, 10.0, 10.0)).actionable
+
+
+def test_labelled_text_and_containers_are_targets() -> None:
+    """What modern applications are actually made of.
+
+    Messages puts every conversation in the sidebar in a labelled AXStaticText, and the
+    message bubbles in labelled AXGroups. Judging by role alone made every one of them
+    invisible, so "find this contact and message them" failed at the first step — the
+    agent could not see a single contact to click.
+    """
+    frame = (0.0, 0.0, 200.0, 30.0)
+    row = Element(role="AXStaticText", label="Caylin O'Connor, lol sorry", frame=frame)
+    card = Element(role="AXGroup", label="Elvin, What the Sus", frame=frame)
+    assert row.actionable
+    assert card.actionable
+
+
+def test_unlabelled_layout_nodes_stay_filtered_out() -> None:
+    """They are the overwhelming majority; listing them would bury the real targets."""
+    frame = (0.0, 0.0, 200.0, 30.0)
+    assert not Element(role="AXGroup", frame=frame).actionable
+    assert not Element(role="AXStaticText", frame=frame).actionable
 
 
 def test_containers_are_not_actionable() -> None:

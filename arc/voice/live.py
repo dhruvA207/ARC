@@ -69,6 +69,7 @@ class LiveSession:
         on_state: Callable[[str], None] | None = None,
         audit: Any = None,
         tools: Sequence[str] = (),
+        echo_suppression: bool = True,
     ) -> None:
         if not api_key:
             raise ArcError("no Gemini API key; see config/secrets.yaml")
@@ -82,6 +83,10 @@ class LiveSession:
         self._tool_names = tuple(tools)
         #: Strong references to in-flight tool calls; see :meth:`_dispatch_tool_call`.
         self._tool_tasks: set[asyncio.Task[None]] = set()
+        #: Whether to stop feeding the microphone to Gemini while ARC is speaking.
+        #: See :meth:`_send`. Turn it off only on headphones, where there is no echo
+        #: path and interrupting ARC by voice is genuinely useful.
+        self._echo_suppression = echo_suppression
         self._silence_ms = silence_ms
         self._on_transcript = on_transcript
         self._on_level = on_level
@@ -304,11 +309,25 @@ class LiveSession:
                 stream.stop()
                 stream.close()
 
+    def _hearing_itself(self) -> bool:
+        """Whether anything ARC is saying is still coming out of the speakers."""
+        return self._speaking or not self._audio_out.empty()
+
     async def _send(self) -> None:
         queue = self._out_queue
         assert queue is not None
         while self._running.is_set():
             chunk = await queue.get()
+
+            # Drop microphone audio while ARC is talking. Without echo cancellation an
+            # open microphone hears the speakers, and the Live API's activity detection
+            # is deliberately eager — so ARC's own voice reads as the user barging in
+            # and Gemini stops generating, chopping the reply off mid-word. The chunk is
+            # taken off the queue and discarded rather than left there: holding it would
+            # send a backlog of ARC's own speech the moment the gate opened.
+            if self._echo_suppression and self._hearing_itself():
+                continue
+
             await self._session.send_realtime_input(
                 audio={"data": chunk["data"], "mime_type": "audio/pcm;rate=16000"}
             )

@@ -103,8 +103,6 @@ class GestureSession:
         self.front = self.views.get("front")
         self.side = self.views.get("side")
 
-        # Built after the cameras, because how a reading is scored depends on how many
-        # of them are actually running — see fusion.score.
         fusion = config.get("fusion", {})
         self.fuser = Fuser(
             min_conf=float(fusion.get("min_conf", 0.7)),
@@ -112,7 +110,6 @@ class GestureSession:
             confirm_solo=int(fusion.get("confirm_solo", 5)),
             depth_ema=float(fusion.get("depth_ema", 0.15)),
             depth_dead=float(fusion.get("depth_dead", 0.01)),
-            dual=len(self.views) > 1,
         )
 
         self.windows = WindowController()

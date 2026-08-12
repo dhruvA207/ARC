@@ -65,6 +65,31 @@ _CONTAINER_ROLES = frozenset(
     {"AXGroup", "AXSplitGroup", "AXScrollArea", "AXLayoutArea", "AXLayoutItem", "AXUnknown"}
 )
 
+#: Roles that are a target *when they carry a label*, even though none of them is a
+#: control in the classic sense.
+#:
+#: This is what makes list-shaped applications usable. A conversation in the Messages
+#: sidebar is an ``AXStaticText`` reading "Caylin O'Connor, lol sorry, 10:55 AM"; the
+#: rows in a Finder list are ``AXRow``; a SwiftUI card is a labelled ``AXGroup``. Judged
+#: by role alone every one of them is invisible, and an agent cannot click what it
+#: cannot see — which is why "find this contact and message them" failed at the first
+#: step rather than the last.
+#:
+#: The label requirement is what keeps this from drowning the list: unlabelled layout
+#: nodes are the overwhelming majority and stay filtered out.
+_TARGETABLE_WHEN_LABELLED = _CONTAINER_ROLES | frozenset(
+    {
+        "AXStaticText",
+        "AXRow",
+        "AXCell",
+        "AXOutline",
+        "AXList",
+        "AXTable",
+        "AXHeading",
+        "AXImage",
+    }
+)
+
 
 @dataclass
 class Element:
@@ -90,8 +115,24 @@ class Element:
 
     @property
     def actionable(self) -> bool:
-        """Whether an agent could plausibly do something with this."""
-        return self.role in _INTERACTIVE_ROLES and self.enabled and self.frame is not None
+        """Whether an agent could plausibly do something with this.
+
+        Two ways to qualify. A classic control role is one. The other is a *labelled
+        container* — because that is what modern macOS apps are made of. Messages puts
+        every conversation in the sidebar in an ``AXGroup`` whose label is the contact
+        and the last message; so are the message bubbles, and so are the rows in a great
+        many SwiftUI and Catalyst apps. Judging by role alone made every one of them
+        invisible, and no amount of prompting gets an agent to click something it cannot
+        see.
+
+        Unlabelled containers stay filtered out. Those are pure layout, they are the
+        overwhelming majority, and listing them would bury the real targets.
+        """
+        if self.frame is None or not self.enabled:
+            return False
+        if self.role in _INTERACTIVE_ROLES:
+            return True
+        return self.role in _TARGETABLE_WHEN_LABELLED and bool((self.label or self.value).strip())
 
     def describe(self) -> str:
         """One line, formatted for a model to read and act on."""

@@ -8,6 +8,7 @@ machine with no speech support at all.
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from typing import Any
 
@@ -573,3 +574,109 @@ def test_the_startup_wait_is_short_enough_for_a_conversation() -> None:
     from arc.tools.camera import _STARTUP_GRACE
 
     assert _STARTUP_GRACE <= 2.0
+
+
+# ── Echo ────────────────────────────────────────────────────────────────────────
+
+
+def test_the_microphone_is_deafened_while_the_live_backend_speaks() -> None:
+    """The live path had no echo protection at all, unlike the Apple one.
+
+    Without cancellation an open microphone hears the speakers, and the Live API's
+    activity detection is eager by configuration — so ARC's own voice registered as the
+    user barging in and Gemini stopped generating, cutting the reply off mid-word.
+    """
+    session = a_live_session()
+    session._speaking = True
+    assert session._hearing_itself()
+
+
+def test_queued_playback_still_counts_as_speaking() -> None:
+    """turn_complete arrives before the speaker has drained; reopening the microphone
+    on that boundary catches the tail of ARC's own sentence."""
+    session = a_live_session()
+    session._speaking = False
+    session._audio_out.put(b"still playing")
+    assert session._hearing_itself()
+
+
+def test_the_microphone_reopens_once_playback_is_done() -> None:
+    """A gate that never lifts leaves the microphone permanently deaf."""
+    session = a_live_session()
+    session._speaking = False
+    assert not session._hearing_itself()
+
+
+def test_echo_suppression_can_be_turned_off_for_headphones() -> None:
+    """There is no echo path on headphones, and voice barge-in is worth having."""
+    from arc.voice.live import LiveSession
+
+    session = LiveSession("fake-key-for-construction", echo_suppression=False)
+    session._speaking = True
+    assert session._echo_suppression is False
+
+
+def test_no_microphone_audio_is_sent_while_arc_is_speaking() -> None:
+    """End to end through the send loop, not just the predicate."""
+    import asyncio
+
+    session = a_live_session()
+    sent: list[Any] = []
+
+    class FakeSocket:
+        async def send_realtime_input(self, **kwargs: Any) -> None:
+            sent.append(kwargs)
+
+    async def drive(speaking: bool) -> None:
+        session._session = FakeSocket()
+        session._out_queue = asyncio.Queue()
+        session._running.set()
+        session._speaking = speaking
+        await session._out_queue.put({"data": b"microphone"})
+        task = asyncio.create_task(session._send())
+        await asyncio.sleep(0.05)
+        session._running.clear()
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+    asyncio.run(drive(speaking=True))
+    assert sent == [], "ARC's own voice was streamed back to Gemini"
+
+    sent.clear()
+    asyncio.run(drive(speaking=False))
+    assert sent, "the microphone never reopened"
+
+
+# ── Screen control is not the camera ────────────────────────────────────────────
+
+
+def test_screen_control_is_reachable_by_voice() -> None:
+    """Without these declared, Gemini truthfully answers that it cannot control the
+    screen — it had no such tool, only the camera ones."""
+    allowed = set(Config.load().section("voice").get("live_tools") or [])
+    assert {"start_screen_control", "stop_screen_control"} <= allowed
+
+
+def test_the_screen_can_be_read_before_it_is_clicked() -> None:
+    """Driving a pointer without being able to look is guesswork."""
+    allowed = set(Config.load().section("voice").get("live_tools") or [])
+    assert {"screenshot", "read_screen_elements", "find_on_screen"} <= allowed
+
+
+def test_the_camera_tool_does_not_claim_screen_control() -> None:
+    """The camera description used to contain "control the screen with my hands", which
+    captured plain "control my screen" requests and sent them to the wrong feature."""
+    from arc.tools import registry
+
+    description = registry.get("enable_camera_gestures").schema().description.lower()
+    assert "control the screen with my hands" not in description
+    assert "start_screen_control" in description, "it should point at the right tool"
+
+
+def test_the_two_features_are_described_as_different_things() -> None:
+    from arc.tools import registry
+
+    control = registry.get("start_screen_control").schema().description.lower()
+    assert "not the camera" in control
+    assert "enable_camera_gestures" in control

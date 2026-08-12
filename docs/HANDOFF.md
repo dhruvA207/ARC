@@ -92,8 +92,7 @@ kill switch     arc-kill works standalone, no config needed
 ## Commands
 
 ```bash
-ARC                         # launch: the app window plus the loopback server
-ARC <anything>              # same as `arc <anything>`; ~/.local/bin/ARC -> bin/ARC
+ARC                         # launch, and only that: the app window plus the server
 arc doctor                  # environment + macOS permission grants
 arc chat                    # REPL; /memory /recall /why /model /tokens
 arc do "<task>"             # multi-step work; --dry-run, --no-server
@@ -101,16 +100,21 @@ arc research "<q>"          # shallow; --deep for corroborated Research Mode
 arc memory stats|search|add|forget|export|consolidate
 arc model list|pull|use|remove
 arc control status|release|demo     # demo shows the blue glow for 5s
+arc control test                    # drives the pointer in a square, verifies each move
 arc task list|show|resume
 arc tools
 arc serve                   # keeps the model warm; 11.5s → 8.7s per task
 arc-kill                    # standalone; works when arc itself does not
 ```
 
-`ARC` is a self-locating wrapper in `bin/`, symlinked onto PATH, so it works from any
-directory and through the symlink. Bare `ARC` runs `arc ui`; anything else passes
-straight through. macOS filesystems are case-insensitive, so `arc` reaches the same
-script — either spelling works, and neither needs the venv activated.
+`ARC` is a self-locating wrapper in `bin/`, symlinked onto PATH, so it launches from
+any directory without the venv activated. It takes no arguments and does nothing but
+launch — the CLI above is a separate thing, run as `.venv/bin/arc <subcommand>` from
+the repo (or with the venv activated).
+
+macOS filesystems are case-insensitive, so `arc` reaches the same script. That is why
+`ARC doctor` refuses with a pointer to the CLI rather than silently opening a window:
+otherwise a mistyped CLI call would look like the CLI had broken.
 
 ---
 

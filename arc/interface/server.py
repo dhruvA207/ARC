@@ -186,6 +186,7 @@ class Runtime:
                 # An allowlist, not the registry: in this mode Gemini decides what to
                 # call, so each name is a capability granted to a remote model.
                 tools=[str(name) for name in (self.config.get("voice.live_tools") or [])],
+                echo_suppression=bool(self.config.get("voice.echo_suppression", True)),
             )
         )
         return self._voice
