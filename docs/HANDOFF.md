@@ -85,6 +85,19 @@ and does not need the venv activated. macOS filesystems are case-insensitive, so
 reaches the same script — that is why `ARC doctor` refuses with a pointer to the CLI
 instead of silently opening a window.
 
+> **Do not activate the venv to launch ARC.** Activating puts `.venv/bin` first on PATH,
+> and because the filesystem is case-insensitive, `ARC` then resolves to `.venv/bin/arc`
+> — the CLI console script — rather than the launcher. You get argparse usage and no
+> window, with nothing written to `ui.log` because the launcher never ran:
+>
+> ```
+> arc: error: the following arguments are required: command
+> ```
+>
+> `deactivate` and the launcher works again. Activation is for development only; the
+> launcher calls `.venv/bin/python` by absolute path and never needs it. From an
+> activated shell, launch with the full path `~/.local/bin/ARC`.
+
 ### 5. Recreate `config/secrets.yaml`
 
 It is gitignored, so the clone will not have it. Without it ARC cannot speak — speech

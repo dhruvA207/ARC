@@ -30,10 +30,17 @@ while [ -h "$SRC" ]; do
 done
 ROOT="$(cd -P "$(dirname "$SRC")/.." && pwd)"
 
-PY="$ROOT/.venv/bin/python"
-if [ ! -x "$PY" ]; then
-  echo "ARC: no virtualenv at $ROOT/.venv" >&2
-  echo "  create it:  $ROOT/bin/arc-setup" >&2
+# Either name works. `venv` is not just tolerated — on Python 3.12 the venv module wraps
+# the prompt in parentheses the activate template then wraps again, so `.venv` renders as
+# `((.venv) )`, dot and all. Naming it `venv` on 3.14 gives a clean `(venv)` instead.
+PY=""
+for candidate in "$ROOT/.venv/bin/python" "$ROOT/venv/bin/python"; do
+  if [ -x "$candidate" ]; then PY="$candidate"; break; fi
+done
+if [ -z "$PY" ]; then
+  echo "ARC: no virtualenv at $ROOT/.venv or $ROOT/venv" >&2
+  echo "  create it:  cd '$ROOT' && python3.12 -m venv venv \\" >&2
+  echo "              && venv/bin/pip install -e '.[mlx,voice,app,camera,dev]'" >&2
   exit 1
 fi
 

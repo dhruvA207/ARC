@@ -33,8 +33,6 @@ llamacpp = [
 voice = [
     "pyobjc-framework-Speech>=10",        # MIT — SFSpeechRecognizer, on-device
     "pyobjc-framework-AVFoundation>=10",  # MIT — AVAudioEngine input tap
-    "google-genai>=1.0",                  # Apache-2.0 — the Gemini live session
-    "sounddevice>=0.5",                   # MIT — audio in and out for that session
 ]
 # The app window. WebKit rendering an ARC-owned NSWindow, rather than a browser tab or
 # a browser-embedding library that would bring its own dependency tree (§7).
@@ -50,37 +48,12 @@ camera = [
     "pyobjc-framework-AVFoundation>=10",   # MIT — identify cameras by name, not index
     "pyobjc-framework-ApplicationServices>=10",  # MIT — move/resize windows via AX
 ]
-# Memory: vector search and the embedder. Optional for the same reason the backends are
-# — `arc doctor`, `arc model list` and the kill switch must work on a machine that has
-# never embedded anything — but anything that stores or recalls a memory needs these.
-# Both imports are lazy and report a clear error when absent.
-memory = [
-    "sqlite-vec>=0.1",    # MIT/Apache-2.0 — vector search inside SQLite, no server (ADR-013)
-    "onnxruntime>=1.17",  # MIT — bge-small without dragging in PyTorch (ADR-014)
-    "tokenizers>=0.20",   # Apache-2.0 — the embedder's tokenizer
-]
-# Screen reading, OCR, and input control. Split from `camera` because they are what ARC
-# uses to see and drive *this* machine, with no camera involved. Every import is lazy, so
-# the core still imports on a machine with no Apple frameworks — asserted in the suite.
-screen = [
-    "pyobjc-core>=10",                           # MIT — objc runtime bridge
-    "pyobjc-framework-Quartz>=10",               # MIT — capture, window list, event taps
-    "pyobjc-framework-Cocoa>=10",                # MIT — AppKit and Foundation
-    "pyobjc-framework-ApplicationServices>=10",  # MIT — the accessibility tree
-    "pyobjc-framework-Vision>=10",               # MIT — OCR
-]
 dev = [
     "pytest>=8.0",   # MIT
     "ruff>=0.6",     # MIT
     "mypy>=1.11",    # MIT
     "types-PyYAML",  # Apache-2.0
 ]
-# What this machine actually runs. Kept as one name so that setting up, or catching up
-# after a `git pull`, is always `pip install -e '.[all]'` rather than a list to remember
-# — and so adding a dependency here is enough to make it arrive on the other Mac.
-# `llamacpp` is deliberately excluded: MLX is the backend on Apple Silicon, and building
-# llama-cpp-python is slow enough to be worth opting into by hand.
-all = ["arc[mlx,voice,app,memory,screen,camera,dev]"]
 
 [project.scripts]
 arc = "arc.__main__:main"

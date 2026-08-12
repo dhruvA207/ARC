@@ -15,9 +15,7 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parent.parent
-LAUNCHER = ROOT / "bin" / "ARC"
-SETUP = ROOT / "bin" / "arc-setup"
+LAUNCHER = Path(__file__).resolve().parent.parent / "bin" / "ARC"
 
 
 def test_the_launcher_exists_and_is_executable() -> None:
@@ -78,64 +76,3 @@ def test_arguments_are_refused_rather_than_ignored(tmp_path: Path) -> None:
     assert result.returncode != 0
     assert "only launches ARC" in result.stderr
     assert ".venv/bin/arc doctor" in result.stderr
-
-
-# --- bin/arc-setup ---------------------------------------------------------------
-#
-# The setup script is the contract between the two Macs: development happens on one and
-# ARC runs on the other, so `git pull && bin/arc-setup` has to be the whole story. What
-# is checked here is that the contract stays intact, not that pip works.
-
-
-def test_the_setup_script_exists_and_is_executable() -> None:
-    assert SETUP.is_file(), "bin/arc-setup is missing"
-    assert SETUP.stat().st_mode & stat.S_IXUSR, "bin/arc-setup is not executable"
-
-
-def test_setup_installs_the_all_extra() -> None:
-    """`[all]` composes every other extra, so it is the one name setup must use.
-
-    Installing a hand-written subset here is how the two machines drift apart.
-    """
-    assert "[all]" in SETUP.read_text(encoding="utf-8")
-
-
-def test_setup_applies_the_activate_prompt_patch() -> None:
-    """Homebrew's activate template doubles the prompt parens; the patch lives in .venv.
-
-    `.venv` is gitignored, so the fix is lost on every recreate. It has to be applied by
-    the script rather than documented, or it silently stops happening.
-    """
-    body = SETUP.read_text(encoding="utf-8")
-    assert 'PS1="("' in body, "no longer matches the broken line it is meant to rewrite"
-    assert "VIRTUAL_ENV_PROMPT" in body
-    assert "--prompt ARC" in body
-
-
-def test_setup_pins_python_312() -> None:
-    """pyproject requires >=3.12; the venv must not drift to whatever `python3` means."""
-    assert "python3.12" in SETUP.read_text(encoding="utf-8")
-
-
-def test_setup_rejects_unknown_arguments() -> None:
-    result = subprocess.run([str(SETUP), "--wat"], capture_output=True, text=True, timeout=60)
-    assert result.returncode == 2
-    assert "usage:" in result.stderr
-
-
-def test_every_declared_extra_is_reachable_from_all() -> None:
-    """`all` is what `arc-setup` installs, so an extra missing from it never ships.
-
-    `llamacpp` is deliberately excluded — MLX is the backend on Apple Silicon.
-    """
-    import tomllib
-
-    with (ROOT / "pyproject.toml").open("rb") as handle:
-        extras = tomllib.load(handle)["project"]["optional-dependencies"]
-
-    assert len(extras["all"]) == 1, "`all` should be a single self-referential entry"
-    composed = extras["all"][0]
-    for name in extras:
-        if name in ("all", "llamacpp"):
-            continue
-        assert name in composed, f"extra {name!r} is not reachable from [all]"
