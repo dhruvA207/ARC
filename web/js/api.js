@@ -56,11 +56,17 @@ export const addMemory = (text) =>
  *
  * @returns {Promise<{reply: string, finish_reason: string}>}
  */
-export async function streamChat({ message, sessionId, signal, onToken, onState }) {
+export async function streamChat({ message, sessionId, system, signal, onToken, onState }) {
+  const body = { message, session_id: sessionId, speak: false };
+  // ARC composes only [system, user] — it keeps no conversation history — so multi-turn
+  // context has to travel in the system prompt. See buildSystem() in chat.js, which also
+  // preserves the memory-provenance guidance ARC's own default carries.
+  if (system) body.system = system;
+
   const response = await fetch(base() + '/chat/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-    body: JSON.stringify({ message, session_id: sessionId, speak: false }),
+    body: JSON.stringify(body),
     signal,
   });
 

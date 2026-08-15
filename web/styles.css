@@ -144,11 +144,144 @@ button, input, textarea { font: inherit; color: inherit; }
 }
 .nav-item.is-active .nav-dot { background: var(--accent); opacity: 1; }
 
+.new-chat {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.new-chat:hover { background: rgba(74, 158, 255, 0.20); }
+.new-chat span { color: var(--accent); font-size: 1.1em; line-height: 1; }
+
+/* ── conversation list ───────────────────────────────────────────────── */
+
+.threads-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.rail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 0.375rem;
+}
+
+.rail-label {
+  margin: 0;
+  padding: 0 0.75rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.thread-search {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.6rem;
+  font-size: 0.8rem;
+  outline: none;
+}
+.thread-search:focus { border-color: var(--accent-line); }
+.thread-search::placeholder { color: var(--text-faint); }
+
+.thread-name {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.thread-snippet {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.threads {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.thread {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+}
+.thread:hover { background: var(--bg-raised); }
+.thread.is-active { background: var(--accent-soft); }
+
+.thread-open {
+  flex: 1;
+  min-width: 0;
+  padding: 0.44rem 0.25rem 0.44rem 0.75rem;
+  background: none;
+  border: 0;
+  color: var(--text-dim);
+  text-align: left;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.thread.is-active .thread-open,
+.thread:hover .thread-open { color: var(--text); }
+
+.thread-tools {
+  display: none;
+  gap: 0.125rem;
+  padding-right: 0.375rem;
+}
+.thread:hover .thread-tools,
+.thread:focus-within .thread-tools { display: flex; }
+
+.thread-act {
+  width: 22px; height: 22px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text-faint);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.thread-act:hover { background: var(--bg); color: var(--text); }
+
+.thread-empty {
+  padding: 0.44rem 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-faint);
+}
+
 .rail-foot {
   margin-top: auto;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line-soft);
 }
 
 /* ── buttons ─────────────────────────────────────────────────────────── */
@@ -212,6 +345,8 @@ button, input, textarea { font: inherit; color: inherit; }
   width: 100%;
   min-width: 0;
   overflow-y: auto;
+  /* Containing block for the floating "jump to latest" button. */
+  position: relative;
 }
 .view.is-active { display: flex; }
 
@@ -227,6 +362,10 @@ button, input, textarea { font: inherit; color: inherit; }
 
 .transcript {
   flex: 1;
+  /* Without this a flex child refuses to shrink below its content, so a long
+     conversation scrolls the whole view and pushes the composer off the bottom
+     instead of scrolling inside the transcript. */
+  min-height: 0;
   overflow-y: auto;
   padding: 2rem 1.5rem 1rem;
 }
@@ -271,9 +410,120 @@ button, input, textarea { font: inherit; color: inherit; }
 .turn.user  .avatar { background: var(--bg-raised); color: var(--text-dim); border: 1px solid var(--line); }
 .turn.arc   .avatar { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line); }
 
-.bubble { min-width: 0; flex: 1; padding-top: 0.125rem; }
+.column { min-width: 0; flex: 1; }
+
+.bubble { min-width: 0; padding-top: 0.125rem; }
 .bubble p { margin: 0 0 0.75rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .bubble p:last-child { margin-bottom: 0; }
+
+.bubble h2, .bubble h3, .bubble h4, .bubble h5 {
+  margin: 1.15rem 0 0.5rem;
+  line-height: 1.35;
+}
+.bubble h2 { font-size: 1.2rem; }
+.bubble h3 { font-size: 1.06rem; }
+.bubble h4, .bubble h5 { font-size: 0.97rem; }
+.bubble > :first-child { margin-top: 0; }
+
+.bubble ul, .bubble ol { margin: 0 0 0.75rem; padding-left: 1.35rem; }
+.bubble li { margin: 0.2rem 0; }
+
+.bubble blockquote {
+  margin: 0 0 0.75rem;
+  padding-left: 0.875rem;
+  border-left: 2px solid var(--accent-line);
+  color: var(--text-dim);
+}
+
+.bubble a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.bubble strong { font-weight: 620; }
+
+/* Message actions — copy, retry. Revealed on hover so a finished conversation reads
+   as prose rather than as a wall of buttons. */
+.actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.turn:hover .actions,
+.turn:focus-within .actions { opacity: 1; }
+
+.act {
+  padding: 0.2rem 0.5rem;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.act:hover { border-color: var(--accent-line); color: var(--text); }
+.actions[hidden] { display: none; }
+
+/* ── editing a message ───────────────────────────────────────────────── */
+
+.editor { margin-top: 0.25rem; }
+.editor textarea {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.75rem;
+  resize: vertical;
+  outline: none;
+  line-height: 1.55;
+}
+.editor-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.primary.small { padding: 0.28rem 0.7rem; font-size: 0.78rem; }
+
+/* ── version switcher ────────────────────────────────────────────────── */
+
+.versions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.4rem;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+.version-step {
+  width: 18px; height: 18px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+  line-height: 1;
+}
+.version-step:hover:not(:disabled) { border-color: var(--accent-line); color: var(--text); }
+.version-step:disabled { opacity: 0.3; cursor: default; }
+.version-count { font-family: var(--mono); }
+
+/* ── syntax highlighting ─────────────────────────────────────────────── */
+
+.tok-keyword { color: #FF7B9C; }
+.tok-string  { color: #8DD98D; }
+.tok-comment { color: var(--text-faint); font-style: italic; }
+.tok-number  { color: #E5A65B; }
+.tok-fn      { color: var(--accent); }
+.tok-key     { color: #C792EA; }
+
+:root[data-theme="light"] .tok-keyword { color: #C2185B; }
+:root[data-theme="light"] .tok-string  { color: #2E7D32; }
+:root[data-theme="light"] .tok-number  { color: #B26500; }
+
+@media (prefers-reduced-motion: reduce) {
+  .actions { transition: none; }
+}
 
 .bubble code {
   font-family: var(--mono);
@@ -357,6 +607,36 @@ button, input, textarea { font: inherit; color: inherit; }
 }
 .composer button svg { width: 17px; height: 17px; }
 .composer button:disabled { opacity: 0.35; cursor: default; }
+/* `display: grid` above outranks the [hidden] attribute's own display:none, which is
+   why Send and Stop would otherwise both be on screen at once. */
+.composer button[hidden] { display: none; }
+
+/* Stop takes Send's place while generating, rather than sitting beside it — one control
+   in one position, so there is never a moment where both look available. */
+.composer .stopping { background: var(--bg-raised); border: 1px solid var(--line); color: var(--text); }
+.composer .stopping:hover { border-color: var(--bad); color: var(--bad); }
+.composer .stopping svg { width: 15px; height: 15px; }
+
+/* ── jump to latest ──────────────────────────────────────────────────── */
+
+.jump {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 7.25rem;
+  width: 32px; height: 32px;
+  display: grid;
+  place-items: center;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--text-dim);
+  cursor: pointer;
+  z-index: 2;
+}
+.jump:hover { border-color: var(--accent-line); color: var(--text); }
+.jump svg { width: 16px; height: 16px; }
+.jump[hidden] { display: none; }
 
 .composer-hint {
   width: min(var(--measure), 100%);

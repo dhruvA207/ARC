@@ -75,10 +75,95 @@ def test_rendering_never_uses_innerhtml_for_model_output() -> None:
     comments explaining this rule do not trip the rule.
     """
     banned = (".innerHTML", ".outerHTML", "insertAdjacentHTML", "document.write")
-    for name in ("chat.js", "memory.js", "app.js", "api.js"):
-        body = (SITE / "js" / name).read_text(encoding="utf-8")
+    for path in sorted((SITE / "js").glob("*.js")):
+        body = path.read_text(encoding="utf-8")
         for pattern in banned:
-            assert pattern not in body, f"{name} uses {pattern} on untrusted text"
+            assert pattern not in body, f"{path.name} uses {pattern} on untrusted text"
+
+
+def test_links_in_replies_are_restricted_to_http() -> None:
+    """A `javascript:` href in a model reply must never become a live link."""
+    body = (SITE / "js" / "markdown.js").read_text(encoding="utf-8")
+    assert "^https?:\\/\\//i" in body or "/^https?:\\/\\//i" in body
+
+
+def test_there_is_a_stop_control() -> None:
+    """Generation runs at ~14 tok/s; being unable to interrupt it is the difference
+    between a conversation and waiting."""
+    html = INDEX.read_text(encoding="utf-8")
+    assert 'id="stop"' in html
+    chat = (SITE / "js" / "chat.js").read_text(encoding="utf-8")
+    assert "AbortController" in chat
+    assert "abort()" in chat
+
+
+def test_the_system_prompt_keeps_arcs_provenance_guidance() -> None:
+    """Sending `system` replaces ARC's default, including a load-bearing instruction.
+
+    Memories arrive with markers like `[episodic, 2026-07-30]`, and without the
+    instruction the model copies them into its replies — which are then stored and
+    recalled, compounding each turn. Overriding `system` without carrying this forward
+    silently reintroduces a bug that took a format change to fix the first time.
+    """
+    chat = (SITE / "js" / "chat.js").read_text(encoding="utf-8")
+    assert "never copy their bracketed" in chat
+    assert "provenance markers into your reply" in chat
+
+
+def test_conversations_are_persisted() -> None:
+    """A reload must not lose the thread you are in the middle of."""
+    store = (SITE / "js" / "store.js").read_text(encoding="utf-8")
+    assert "localStorage" in store
+    for fn in ("export function create", "export function remove", "export function rename"):
+        assert fn in store, f"store.js is missing {fn}"
+
+
+def test_editing_a_message_branches_rather_than_overwrites() -> None:
+    """The reply you already had is the thing you are usually comparing against.
+
+    Overwriting it makes editing destructive, which is the opposite of why anyone edits.
+    """
+    store = (SITE / "js" / "store.js").read_text(encoding="utf-8")
+    for fn in (
+        "export function editTurn",
+        "export function versionInfo",
+        "export function useVersion",
+    ):
+        assert fn in store, f"store.js is missing {fn}"
+    chat = (SITE / "js" / "chat.js").read_text(encoding="utf-8")
+    assert "startEditing" in chat
+    assert "addVersionSwitcher" in chat
+
+
+def test_search_covers_inactive_branches() -> None:
+    """A message you edited away from is still something you might go looking for."""
+    store = (SITE / "js" / "store.js").read_text(encoding="utf-8")
+    assert "export function search" in store
+    body = store[store.index("export function search") :]
+    assert "versions" in body, "search ignores branched-away turns"
+
+
+def test_conversations_can_be_exported() -> None:
+    store = (SITE / "js" / "store.js").read_text(encoding="utf-8")
+    assert "export function toMarkdown" in store
+    assert "export function toJSON" in store
+    app = (SITE / "js" / "app.js").read_text(encoding="utf-8")
+    assert "createObjectURL" in app
+    assert "revokeObjectURL" in app, "object URLs must be released or the page leaks them"
+
+
+def test_code_blocks_are_highlighted_without_a_library() -> None:
+    """§7 treats dependencies as a liability; highlight.js is ~120 KB for a chat window."""
+    assert (SITE / "js" / "highlight.js").is_file()
+    markdown = (SITE / "js" / "markdown.js").read_text(encoding="utf-8")
+    assert "from './highlight.js'" in markdown
+    assert "highlight(code" in markdown
+
+    highlight = (SITE / "js" / "highlight.js").read_text(encoding="utf-8")
+    # Strings and comments are consumed whole, so a keyword inside a string is not
+    # highlighted as one — the failure that makes naive highlighters look broken.
+    assert "span('string'" in highlight
+    assert "span('comment'" in highlight
 
 
 # --- separation from the ARC application ------------------------------------------

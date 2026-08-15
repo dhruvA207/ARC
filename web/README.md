@@ -66,10 +66,50 @@ Until then the honest description is: the site deploys, and it is fully usable l
 | `index.html` | The whole app shell — two views, one dialog |
 | `styles.css` | Theme. One accent (`#4A9EFF`), dark and light |
 | `js/api.js` | Talking to ARC: configurable base URL, SSE parsing |
-| `js/chat.js` | The conversation view |
+| `js/chat.js` | The conversation view — streaming, stop, edit, branch, retry, copy |
+| `js/markdown.js` | Small markdown renderer, DOM nodes only |
+| `js/highlight.js` | Syntax highlighting for code blocks, hand-written |
+| `js/store.js` | Conversations, branches, search and export — in localStorage |
 | `js/memory.js` | Search over memory, and adding to it |
-| `js/app.js` | View switching, connection status |
+| `js/app.js` | View switching, thread list, connection status |
 | `serve.py` | Local dev server and API proxy |
+
+## Where conversations live
+
+ARC remembers *facts* — every turn is written to its memory and is searchable — but it
+has no notion of a thread you can reopen. `/chat/stream` takes one message and returns
+one reply; there is no conversation resource to list or fetch.
+
+So threads live in `localStorage`, which is also what keeps them working if this page is
+ever hosted with no backend of its own. The trade-off, plainly: **threads are
+per-browser**, and clearing site data loses them. The content is still in ARC's memory
+and findable from the Memory view; what is lost is the grouping into named conversations.
+
+## Editing branches, it does not overwrite
+
+Editing a message forks the conversation: the path you were on is kept and a `‹ 2/2 ›`
+switcher appears on that turn. The point of editing is usually to compare, so discarding
+the reply you already had would defeat it.
+
+A fork is stored as the *tail* of the conversation from the edited turn onward —
+`versions[i] = { list: [tail, …], active: n }` — and the visible conversation is always
+`turns`, which is head + active tail. Nothing outside `store.js` needs to know forks
+exist. Conversation search deliberately reaches into inactive branches: a message you
+edited away from is otherwise unreachable except by remembering where you forked.
+
+## Multi-turn context
+
+ARC's `_compose` builds only `[system, user]` — it keeps no conversation history, so a
+naive client gets an assistant with amnesia between turns.
+
+The fix is in `buildSystem()` in `chat.js`: the last dozen turns travel in the `system`
+field, which `/chat/stream` already accepts. Nothing on ARC's side changes.
+
+**If you touch that function, keep the provenance sentence.** Sending `system` replaces
+ARC's default, which carries an instruction never to copy memory markers like
+`[episodic, 2026-07-30]` into replies. Without it the model imitates them, the reply is
+stored, and it compounds every turn — it took a format change to fix the first time.
+There is a test.
 
 ## Two things worth knowing if you change this
 
