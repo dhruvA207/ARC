@@ -20,6 +20,7 @@ Standard library only, matching the rest of the repo (§7: dependencies are a li
 from __future__ import annotations
 
 import argparse
+import errno
 import sys
 from functools import partial
 from http.client import HTTPConnection
@@ -205,7 +206,22 @@ def main(argv: list[str] | None = None) -> int:
     Handler.arc_base = args.arc or arc_endpoint()
     handler = partial(Handler, directory=str(SITE_DIR))
 
-    with ThreadingHTTPServer((BIND_HOST, args.port), handler) as httpd:
+    try:
+        httpd = ThreadingHTTPServer((BIND_HOST, args.port), handler)
+    except OSError as exc:
+        # Overwhelmingly this is "someone is already serving the site" — usually a
+        # forgotten `make web` in another terminal. A twelve-frame socketserver
+        # traceback buries that, so say it plainly and suggest both ways out.
+        if exc.errno == errno.EADDRINUSE:
+            print(f"arc.ai: port {args.port} is already in use.", file=sys.stderr)
+            print("  another `make web` is probably still running.", file=sys.stderr)
+            hint = f"  stop it, or use another port:  make web PORT={args.port + 1}"
+            print(hint, file=sys.stderr)
+            return 1
+        print(f"arc.ai: could not start on port {args.port}: {exc}", file=sys.stderr)
+        return 1
+
+    with httpd:
         print(f"arc.ai   http://{BIND_HOST}:{args.port}")
         print(f"api      {Handler.arc_base}  (proxied at /api/)")
         print("stop     Ctrl-C\n", flush=True)

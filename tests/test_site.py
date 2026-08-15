@@ -52,7 +52,11 @@ def test_every_asset_reference_is_relative() -> None:
 
 
 def test_nothing_is_loaded_from_a_third_party() -> None:
-    """The whole point is local-first; a CDN font would phone home on every load."""
+    """The bundle has to be self-contained.
+
+    A CDN font or script is a third party in the load path of every page view — an outage,
+    a tracker, and a dependency nobody chose, for something the repo already ships.
+    """
     html = INDEX.read_text(encoding="utf-8")
     for match in re.finditer(r'(?:src|href)="(https?://[^"]+)"', html):
         pytest.fail(f"external resource: {match.group(1)}")
@@ -106,8 +110,22 @@ def test_the_system_prompt_keeps_arcs_provenance_guidance() -> None:
     silently reintroduces a bug that took a format change to fix the first time.
     """
     chat = (SITE / "js" / "chat.js").read_text(encoding="utf-8")
-    assert "never copy their bracketed" in chat
-    assert "provenance markers into your reply" in chat
+    # Join JS string concatenation first — the prompt is written across several lines and
+    # reflowing it must not look like deleting the instruction.
+    joined = re.sub(r"'\s*\+\s*'", "", chat)
+    assert "never copy their bracketed provenance markers into your reply" in joined
+
+
+def test_the_system_prompt_makes_no_claim_about_where_arc_runs() -> None:
+    """The deployment story is expected to change; the prompt should not pin it down.
+
+    Memory is the identity here, not location — a prompt insisting ARC lives on one
+    machine starts lying the moment it does not.
+    """
+    chat = (SITE / "js" / "chat.js").read_text(encoding="utf-8")
+    prompt = chat[chat.index("const ARC_SYSTEM") : chat.index("let current")]
+    for claim in ("local-first", "on your machine", "on Dhruv's machine", "local "):
+        assert claim not in prompt, f"system prompt claims {claim!r}"
 
 
 def test_conversations_are_persisted() -> None:

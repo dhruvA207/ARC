@@ -16,7 +16,14 @@ const jump = document.getElementById('jump');
 const CONTEXT_TURNS = 12;
 
 /**
- * ARC's own default system prompt, reproduced because sending `system` replaces it.
+ * The system prompt, sent because supplying `system` replaces ARC's own default.
+ *
+ * The identity line is deliberately plain — no claim about where ARC runs, and no pitch
+ * about what makes it special. The deployment story is expected to change, and anything
+ * more specific here is something that will need unwriting later.
+ *
+ * The memory handling below is not framing, it is mechanics: recalled memories really do
+ * get injected into this prompt, so the model has to be told what they are.
  *
  * The provenance sentence is load-bearing, not decoration: memories arrive rendered with
  * markers like `[episodic, 2026-07-30]`, and without the instruction the model treats
@@ -24,10 +31,9 @@ const CONTEXT_TURNS = 12;
  * then stored and recalled, compounding each turn. Dropping this line reintroduces that.
  */
 const ARC_SYSTEM =
-  'You are ARC, a local-first assistant on Dhruv\'s machine, with memory of past ' +
-  'conversations. Use any memories below naturally; never copy their bracketed ' +
-  'provenance markers into your reply, and cite a source URL when you rely on one. ' +
-  'Be concise.';
+  'You are ARC, Dhruv\'s assistant. Use any memories below naturally; never copy their ' +
+  'bracketed provenance markers into your reply, and cite a source URL when you rely ' +
+  'on one. Be concise.';
 
 let current = null;
 let inFlight = null;
@@ -132,7 +138,7 @@ function showEmpty() {
   const heading = document.createElement('h1');
   heading.textContent = 'ARC';
   const line = document.createElement('p');
-  line.textContent = 'Everything stays on your machine. Ask anything.';
+  line.textContent = 'How can I help?';
 
   blank.append(svg, heading, line);
   transcript.append(blank);
