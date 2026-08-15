@@ -1,0 +1,506 @@
+/* ARC — arc.ai
+ *
+ * One accent (#4A9EFF, the colour the control indicator already uses) against a
+ * near-neutral ground. The orb is gone from this build, so the identity has to carry in
+ * the mark, the accent, and the restraint — not in motion.
+ *
+ * Dark by default because that is what ARC has always looked like; the light palette is
+ * defined too so a light-preference machine is not blinded.
+ */
+
+:root {
+  --accent: #4A9EFF;
+  --accent-soft: rgba(74, 158, 255, 0.12);
+  --accent-line: rgba(74, 158, 255, 0.30);
+
+  --bg: #0E1116;
+  --bg-rail: #0A0D11;
+  --bg-raised: #161B22;
+  --bg-input: #12171E;
+
+  --text: #E6EDF3;
+  --text-dim: #9AA7B4;
+  --text-faint: #64707D;
+
+  --line: #21262D;
+  --line-soft: #1A1F26;
+
+  --good: #3FB950;
+  --bad: #F85149;
+  --warn: #D29922;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --measure: 44rem;
+
+  --font: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+:root[data-theme="light"] {
+  --bg: #FFFFFF;
+  --bg-rail: #F6F8FA;
+  --bg-raised: #FFFFFF;
+  --bg-input: #F6F8FA;
+  --text: #1F2328;
+  --text-dim: #59636E;
+  --text-faint: #818B98;
+  --line: #D1D9E0;
+  --line-soft: #E4E8EC;
+  --accent-soft: rgba(74, 158, 255, 0.10);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input, textarea { font: inherit; color: inherit; }
+
+.skip {
+  position: absolute;
+  left: -9999px;
+}
+.skip:focus {
+  left: 1rem; top: 1rem;
+  z-index: 10;
+  background: var(--bg-raised);
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius-sm);
+}
+
+/* ── layout ──────────────────────────────────────────────────────────── */
+
+.shell {
+  display: grid;
+  grid-template-columns: 15rem 1fr;
+  height: 100%;
+}
+
+.rail {
+  background: var(--bg-rail);
+  border-right: 1px solid var(--line-soft);
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem 0.875rem;
+  gap: 1.5rem;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0 0.5rem;
+  color: var(--accent);
+}
+
+.mark { width: 26px; height: 26px; }
+
+.wordmark {
+  font-size: 1.05rem;
+  font-weight: 620;
+  letter-spacing: 0.14em;
+  color: var(--text);
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.nav-item:hover { background: var(--bg-raised); color: var(--text); }
+.nav-item.is-active { background: var(--accent-soft); color: var(--text); }
+
+.nav-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
+}
+.nav-item.is-active .nav-dot { background: var(--accent); opacity: 1; }
+
+.rail-foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* ── buttons ─────────────────────────────────────────────────────────── */
+
+.ghost {
+  padding: 0.5rem 0.75rem;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+.ghost:hover { border-color: var(--accent-line); color: var(--text); }
+.ghost.subtle { border: 0; color: var(--text-faint); text-align: left; padding-left: 0.25rem; }
+.ghost.subtle:hover { color: var(--text-dim); }
+
+.primary {
+  padding: 0.5rem 1rem;
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: #08121F;
+  font-weight: 560;
+  cursor: pointer;
+}
+.primary:hover { filter: brightness(1.08); }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── status ──────────────────────────────────────────────────────────── */
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.25rem;
+  font-size: 0.8rem;
+  color: var(--text-faint);
+}
+.status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  flex: none;
+}
+.status[data-state="ok"]   .status-dot { background: var(--good); }
+.status[data-state="down"] .status-dot { background: var(--bad); }
+.status[data-state="busy"] .status-dot { background: var(--warn); }
+
+/* ── views ───────────────────────────────────────────────────────────── */
+
+.main { overflow: hidden; display: flex; }
+
+.view {
+  display: none;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  overflow-y: auto;
+}
+.view.is-active { display: flex; }
+
+.view-head {
+  width: min(var(--measure), 100%);
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 0;
+}
+.view-head h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }
+.view-head p { margin: 0; color: var(--text-dim); }
+
+/* ── chat ────────────────────────────────────────────────────────────── */
+
+.transcript {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2rem 1.5rem 1rem;
+}
+
+.empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+.empty-mark { width: 52px; height: 52px; color: var(--accent); opacity: 0.85; }
+.empty h1 {
+  margin: 0.75rem 0 0;
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--text);
+}
+.empty p { margin: 0; font-size: 0.925rem; }
+
+.turn {
+  width: min(var(--measure), 100%);
+  margin: 0 auto 1.75rem;
+  display: flex;
+  gap: 0.875rem;
+}
+
+.avatar {
+  flex: none;
+  width: 26px; height: 26px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  font-weight: 640;
+  letter-spacing: 0.04em;
+}
+.turn.user  .avatar { background: var(--bg-raised); color: var(--text-dim); border: 1px solid var(--line); }
+.turn.arc   .avatar { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line); }
+
+.bubble { min-width: 0; flex: 1; padding-top: 0.125rem; }
+.bubble p { margin: 0 0 0.75rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bubble p:last-child { margin-bottom: 0; }
+
+.bubble code {
+  font-family: var(--mono);
+  font-size: 0.875em;
+  background: var(--bg-raised);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+.bubble pre {
+  background: var(--bg-raised);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: 0.875rem 1rem;
+  overflow-x: auto;
+  margin: 0 0 0.75rem;
+}
+.bubble pre code { background: none; padding: 0; font-size: 0.85rem; }
+
+.turn.error .bubble { color: var(--bad); }
+
+/* The caret that trails streamed tokens. The only motion in the build — it marks
+   "still generating", which at ~14 tok/s is a state you sit in for several seconds. */
+.caret {
+  display: inline-block;
+  width: 0.5em; height: 1em;
+  margin-left: 0.1em;
+  background: var(--accent);
+  vertical-align: text-bottom;
+  animation: blink 1.1s steps(2, start) infinite;
+}
+@keyframes blink { to { visibility: hidden; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .caret { animation: none; opacity: 0.6; }
+}
+
+/* ── composer ────────────────────────────────────────────────────────── */
+
+.composer-wrap {
+  padding: 0 1.5rem 1.25rem;
+  background: linear-gradient(to top, var(--bg) 60%, transparent);
+}
+
+.composer {
+  width: min(var(--measure), 100%);
+  margin: 0 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  background: var(--bg-input);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.5rem 0.5rem 0.875rem;
+  transition: border-color 140ms ease;
+}
+.composer:focus-within { border-color: var(--accent-line); }
+
+.composer textarea {
+  flex: 1;
+  border: 0;
+  background: none;
+  resize: none;
+  outline: none;
+  max-height: 12rem;
+  padding: 0.375rem 0;
+  line-height: 1.55;
+}
+.composer textarea::placeholder { color: var(--text-faint); }
+
+.composer button {
+  flex: none;
+  width: 32px; height: 32px;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: #08121F;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+.composer button svg { width: 17px; height: 17px; }
+.composer button:disabled { opacity: 0.35; cursor: default; }
+
+.composer-hint {
+  width: min(var(--measure), 100%);
+  margin: 0.5rem auto 0;
+  font-size: 0.75rem;
+  color: var(--text-faint);
+  text-align: center;
+}
+kbd {
+  font-family: var(--mono);
+  font-size: 0.9em;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.05em 0.3em;
+}
+
+/* ── memory ──────────────────────────────────────────────────────────── */
+
+.memory-search,
+.memory-add {
+  width: min(var(--measure), 100%);
+  margin: 1.25rem auto 0;
+  padding: 0 1.5rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.memory-search input,
+.memory-add textarea {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.75rem;
+  outline: none;
+  resize: none;
+}
+.memory-search input:focus,
+.memory-add textarea:focus { border-color: var(--accent-line); }
+
+.add-fact {
+  width: min(var(--measure), 100%);
+  margin: 1rem auto 0;
+  padding: 0 1.5rem;
+}
+.add-fact summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 0.875rem;
+  padding: 0.25rem 0;
+}
+.add-fact summary:hover { color: var(--text); }
+.add-fact .memory-add { padding: 0; margin-top: 0.625rem; }
+
+.results {
+  width: min(var(--measure), 100%);
+  margin: 0 auto;
+  padding: 1.25rem 1.5rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.memory {
+  background: var(--bg-raised);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  padding: 0.875rem 1rem;
+}
+.memory-content { margin: 0 0 0.625rem; overflow-wrap: anywhere; }
+
+.memory-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+.tag {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  font-family: var(--mono);
+}
+.tag.layer { border-color: var(--accent-line); color: var(--accent); }
+
+.note {
+  color: var(--text-dim);
+  text-align: center;
+  padding: 2rem 0;
+}
+.note.bad { color: var(--bad); }
+
+/* ── dialog ──────────────────────────────────────────────────────────── */
+
+.dialog {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  color: var(--text);
+  padding: 0;
+  width: min(28rem, calc(100vw - 2rem));
+}
+.dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
+
+.dialog-body { padding: 1.5rem; }
+.dialog-body h2 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+.dialog-note { margin: 0 0 1.25rem; font-size: 0.85rem; color: var(--text-dim); }
+.dialog-body label { display: block; font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.375rem; }
+.dialog-body input {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.75rem;
+  outline: none;
+}
+.dialog-body input:focus { border-color: var(--accent-line); }
+.dialog-hint { font-size: 0.75rem; color: var(--text-faint); margin: 0.5rem 0 0; min-height: 1.2em; }
+.dialog-body menu {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin: 1.5rem 0 0;
+  padding: 0;
+}
+
+code { font-family: var(--mono); font-size: 0.875em; }
+
+/* ── narrow ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 46rem) {
+  .shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .rail {
+    flex-direction: row;
+    align-items: center;
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+    padding: 0.625rem 0.875rem;
+    gap: 0.875rem;
+    overflow-x: auto;
+  }
+  .nav { flex-direction: row; }
+  .rail-foot { margin-top: 0; flex-direction: row; align-items: center; }
+  .rail-foot .ghost { white-space: nowrap; }
+  .status-text { display: none; }
+}

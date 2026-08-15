@@ -1,0 +1,53 @@
+# Publish web/ to GitHub Pages.
+#
+# The site is static — no build step, no node toolchain — so this uploads the directory
+# as-is. Enable it once under Settings → Pages → Source → GitHub Actions.
+#
+# Note that a deployed page has no ARC behind it: Pages serves files and cannot run the
+# server. The site loads and reports `ARC offline` until it is pointed at a reachable
+# ARC through the Connection dialog. See web/README.md.
+
+name: Deploy arc.ai to Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - ".github/workflows/pages.yml"
+  # So it can be published from a branch before the merge lands.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; queued rather than cancelled so a push mid-deploy does not
+# leave the site half-published.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Disable Jekyll
+        # Without this, Pages runs the files through Jekyll, which ignores directories
+        # beginning with an underscore and rewrites things it should not.
+        run: touch web/.nojekyll
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

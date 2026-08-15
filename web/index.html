@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ARC</title>
+<meta name="description" content="ARC — a local-first assistant with memory.">
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='11' fill='none' stroke='%234A9EFF' stroke-width='3' stroke-linecap='round' stroke-dasharray='52 70' transform='rotate(-45 16 16)'/></svg>">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="shell">
+
+  <aside class="rail">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="3"
+                stroke-linecap="round" stroke-dasharray="52 70" transform="rotate(-45 16 16)"/>
+      </svg>
+      <span class="wordmark">ARC</span>
+    </div>
+
+    <nav class="nav" aria-label="Sections">
+      <button class="nav-item is-active" data-view="chat" aria-current="page">
+        <span class="nav-dot"></span> Chat
+      </button>
+      <button class="nav-item" data-view="memory">
+        <span class="nav-dot"></span> Memory
+      </button>
+    </nav>
+
+    <div class="rail-foot">
+      <button id="new-chat" class="ghost">New conversation</button>
+      <div id="status" class="status" data-state="unknown">
+        <span class="status-dot"></span>
+        <span class="status-text">connecting…</span>
+      </div>
+      <button id="settings-open" class="ghost subtle">Connection</button>
+    </div>
+  </aside>
+
+  <main id="main" class="main">
+
+    <!-- ── chat ─────────────────────────────────────────────────────────── -->
+    <section class="view is-active" data-view="chat">
+      <div id="transcript" class="transcript" aria-live="polite" aria-label="Conversation">
+        <div class="empty" id="chat-empty">
+          <svg class="empty-mark" viewBox="0 0 32 32" aria-hidden="true">
+            <circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-dasharray="52 70" transform="rotate(-45 16 16)"/>
+          </svg>
+          <h1>ARC</h1>
+          <p>Everything stays on your machine. Ask anything.</p>
+        </div>
+      </div>
+
+      <div class="composer-wrap">
+        <form id="composer" class="composer" autocomplete="off">
+          <textarea id="input" rows="1" placeholder="Message ARC…"
+                    aria-label="Message ARC" enterkeyhint="send"></textarea>
+          <button id="send" type="submit" aria-label="Send message">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 12h15M13 6l6 6-6 6" fill="none" stroke="currentColor"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </form>
+        <p class="composer-hint">
+          <kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line
+        </p>
+      </div>
+    </section>
+
+    <!-- ── memory ───────────────────────────────────────────────────────── -->
+    <section class="view" data-view="memory">
+      <header class="view-head">
+        <h1>Memory</h1>
+        <p>Everything ARC remembers, searched the way ARC searches it.</p>
+      </header>
+
+      <form id="memory-search" class="memory-search" autocomplete="off">
+        <input id="memory-q" type="search" placeholder="Search memory…" aria-label="Search memory">
+        <button type="submit" class="primary">Search</button>
+      </form>
+
+      <details class="add-fact">
+        <summary>Add a memory</summary>
+        <form id="memory-add" class="memory-add" autocomplete="off">
+          <textarea id="memory-text" rows="2" placeholder="A fact worth keeping…"
+                    aria-label="New memory"></textarea>
+          <button type="submit" class="primary">Remember</button>
+        </form>
+      </details>
+
+      <div id="memory-results" class="results" aria-live="polite"></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ── connection settings ────────────────────────────────────────────── -->
+<dialog id="settings" class="dialog">
+  <form method="dialog" class="dialog-body">
+    <h2>Connection</h2>
+    <p class="dialog-note">
+      The site is static. It talks to a running ARC over HTTP — locally that is the dev
+      server's <code>/api</code> proxy; when this page is hosted somewhere else, point it
+      at an ARC you can reach.
+    </p>
+    <label for="api-base">API base URL</label>
+    <input id="api-base" type="url" spellcheck="false" placeholder="/api">
+    <p class="dialog-hint" id="api-hint"></p>
+    <menu>
+      <button value="cancel" class="ghost">Cancel</button>
+      <button id="api-save" value="save" class="primary">Save</button>
+    </menu>
+  </form>
+</dialog>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
