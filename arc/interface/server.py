@@ -54,6 +54,10 @@ BIND_HOST = "127.0.0.1"
 #: build step or a node toolchain. Everything in here is hand-written ES modules.
 WEBUI_DIR = Path(__file__).parent / "webui"
 
+#: The desktop panel's UI. Served by the same process so the panel's webview is
+#: same-origin with the API — no proxy, no CORS, nothing extra to run.
+DESKTOP_UI_DIR = Path(__file__).parent.parent / "desktop" / "ui"
+
 #: Deliberately a closed allow-list rather than mimetypes.guess_type. The directory
 #: only ever holds these four kinds of file, and an unknown extension should 404 rather
 #: than be served with a guessed type.
@@ -325,18 +329,25 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _serve_static(self, path: str) -> None:
-        """Serve one file from ``WEBUI_DIR``.
+        """Serve one file from ``WEBUI_DIR``, or from the desktop panel's own directory.
 
         ``resolve()`` then a containment check, rather than trusting the URL: a path
         like ``/ui/../../../etc/passwd`` normalises away only after resolution, and the
         server runs with ARC's own (unrestricted) privileges.
         """
-        relative = path[len("/ui/") :] if path.startswith("/ui/") else "index.html"
+        # The desktop panel is a second, separate UI served by the same process, so the
+        # panel's WKWebView is same-origin with the API and needs no proxy of its own.
+        if path.startswith("/desktop"):
+            base = DESKTOP_UI_DIR
+            relative = path[len("/desktop/") :] if path.startswith("/desktop/") else ""
+        else:
+            base = WEBUI_DIR
+            relative = path[len("/ui/") :] if path.startswith("/ui/") else ""
         if not relative:
             relative = "index.html"
 
-        target = (WEBUI_DIR / relative).resolve()
-        root = WEBUI_DIR.resolve()
+        target = (base / relative).resolve()
+        root = base.resolve()
         if root not in target.parents and target != root:
             self._send({"error": "not found"}, 404)
             return
@@ -390,7 +401,12 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             if route.path in ("/health", "/status"):
                 self._send(self.runtime.status())
-            elif route.path == "/" or route.path.startswith("/ui/"):
+            elif (
+                route.path == "/"
+                or route.path.startswith("/ui/")
+                or route.path == "/desktop"
+                or route.path.startswith("/desktop/")
+            ):
                 self._serve_static(route.path)
             elif route.path == "/voice/status":
                 self._send(self._voice_status())
@@ -398,6 +414,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._handle_events()
             elif route.path == "/memory/search":
                 self._handle_memory_search(query)
+            elif route.path == "/conversations":
+                self._handle_conversations_get(query)
             elif route.path == "/tools":
                 from arc.tools import registry
 
@@ -430,6 +448,33 @@ class _Handler(BaseHTTPRequestHandler):
                 self._handle_voice_interrupt()
             elif route.path == "/memory/add":
                 self._handle_memory_add(body)
+            elif route.path == "/conversations":
+                from arc.interface import conversations
+
+                self._send(conversations.save(body))
+            else:
+                self._send({"error": f"no such endpoint: {route.path}"}, 404)
+        except ArcError as exc:
+            self._send({"error": str(exc)}, 400)
+        except Exception as exc:  # pragma: no cover - defensive
+            _log.exception("request failed")
+            self._send({"error": f"{type(exc).__name__}: {exc}"}, 500)
+
+    def do_DELETE(self) -> None:
+        """Only conversations are deletable. Memory has its own `arc memory forget`."""
+        route = urlparse(self.path)
+        query = parse_qs(route.query)
+        self.runtime.requests += 1
+
+        try:
+            if route.path == "/conversations":
+                from arc.interface import conversations
+
+                cid = (query.get("id") or [""])[0]
+                if not cid:
+                    self._send({"error": "id is required"}, 400)
+                    return
+                self._send({"deleted": conversations.delete(cid)})
             else:
                 self._send({"error": f"no such endpoint: {route.path}"}, 404)
         except ArcError as exc:
@@ -776,6 +821,26 @@ class _Handler(BaseHTTPRequestHandler):
         limit = int((query.get("limit") or ["10"])[0])
         hits = memory.retriever.search(text, limit=limit) if text else []
         self._send({"query": text, "results": [hit.to_dict() for hit in hits]})
+
+    def _handle_conversations_get(self, query: dict[str, list[str]]) -> None:
+        """One conversation with `?id=`, or a summary list without it.
+
+        Shared by every front end, which is the point: the desktop panel and the web UI
+        are looking at the same threads rather than two private copies.
+        """
+        from arc.interface import conversations
+
+        cid = (query.get("id") or [""])[0]
+        if cid:
+            record = conversations.load(cid)
+            if record is None:
+                self._send({"error": f"no such conversation: {cid}"}, 404)
+                return
+            self._send(record)
+            return
+
+        limit = int((query.get("limit") or ["200"])[0])
+        self._send({"conversations": conversations.listing(limit)})
 
     def _handle_memory_add(self, body: dict[str, Any]) -> None:
         """Store a fact directly."""

@@ -1,0 +1,89 @@
+/* The panel is a floating overlay, so the page paints no opaque background of its own —
+   the orb's halo is the only backdrop, and everything else sits on top of whatever
+   window happens to be behind. */
+
+:root {
+  --accent: #4A9EFF;
+  --text: #E6EDF3;
+  --dim: #9AA7B4;
+  --font: ui-sans-serif, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  font-family: var(--font);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  /* The panel is dragged by its background; text selection would fight that. */
+  user-select: none;
+  cursor: default;
+}
+
+#orb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.shell {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 1.25rem 1.5rem 1.35rem;
+  gap: 0.5rem;
+  opacity: 0;
+  transition: opacity 200ms ease;
+  pointer-events: none;
+}
+/* Only the centred panel is something you type into. Parked, it is a status light. */
+body[data-state="centre"] .shell { opacity: 1; pointer-events: auto; }
+
+.reply {
+  max-height: 11rem;
+  overflow-y: auto;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  user-select: text;
+}
+.reply:empty { display: none; }
+
+.composer input {
+  width: 100%;
+  padding: 0.6rem 0.9rem;
+  font: inherit;
+  color: var(--text);
+  background: rgba(18, 24, 33, 0.72);
+  border: 1px solid rgba(120, 140, 165, 0.28);
+  border-radius: 10px;
+  outline: none;
+  backdrop-filter: blur(12px);
+}
+.composer input:focus { border-color: rgba(74, 158, 255, 0.55); }
+.composer input::placeholder { color: var(--dim); }
+
+.status {
+  margin: 0;
+  min-height: 1em;
+  font-size: 0.72rem;
+  color: var(--dim);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+/* Parked in the corner, the status line is the whole interface. */
+body[data-state="corner"] .status {
+  position: absolute;
+  left: 1rem;
+  bottom: 0.9rem;
+  margin: 0;
+}

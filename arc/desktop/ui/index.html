@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ARC</title>
+<link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <canvas id="orb" aria-hidden="true"></canvas>
+
+  <div id="shell" class="shell">
+    <div id="reply" class="reply" aria-live="polite"></div>
+    <form id="composer" class="composer" autocomplete="off">
+      <input id="input" type="text" placeholder="Ask ARC…" aria-label="Ask ARC" autocomplete="off">
+    </form>
+    <p id="status" class="status"></p>
+  </div>
+
+  <script type="module" src="panel.js"></script>
+</body>
+</html>

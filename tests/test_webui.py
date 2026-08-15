@@ -99,7 +99,18 @@ def test_health_is_still_json_after_root_became_the_ui() -> None:
     status must remain reachable somewhere stable."""
     source = Path("arc/interface/server.py").read_text(encoding="utf-8")
     assert '"/health", "/status"' in source
-    assert 'route.path == "/" or route.path.startswith("/ui/")' in source
+
+    # The static branch must still be reached by `/` and `/ui/…` and nothing else. Checked
+    # as separate conditions rather than one literal line: the branch now also carries the
+    # desktop panel's UI and is wrapped across several lines, and reformatting it should
+    # not read as deleting it.
+    assert 'route.path == "/"' in source
+    assert 'route.path.startswith("/ui/")' in source
+
+    # `/health` is matched before the static branch, so the UI can never swallow it.
+    health_at = source.index('"/health", "/status"')
+    static_at = source.index('route.path.startswith("/ui/")')
+    assert health_at < static_at, "the static route would shadow /health"
 
 
 def test_stream_endpoint_is_registered() -> None:

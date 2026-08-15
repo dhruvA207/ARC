@@ -663,6 +663,25 @@ def cmd_ui(args: argparse.Namespace) -> int:
             server.clear_endpoint()
 
 
+def cmd_desktop(args: argparse.Namespace) -> int:
+    """Run ARC as a menu bar resident with a summonable floating panel.
+
+    Unlike ``arc ui`` this takes no Dock icon and opens no window you have to find. It
+    puts the orb in the menu bar, parks a floating panel in the corner, and waits for a
+    double-tap of the command key.
+    """
+    from arc.desktop import app as desktop
+    from arc.interface import server
+
+    if not desktop.available():
+        print("the desktop shell needs pyobjc-framework-WebKit: pip install 'arc[app]'")
+        return 1
+
+    config = _require_config(args)
+    port = args.port or int(config.get("server.port", server.DEFAULT_PORT))
+    return desktop.run(config, port=port, serve=not args.no_serve)
+
+
 def _print_transcript(transcript: Any) -> None:
     """Print a partial in place, a final on its own line."""
     mark = "*" if transcript.is_final else "."
@@ -1306,6 +1325,17 @@ def _build_parser() -> argparse.ArgumentParser:
         help="attach to a server that is already running instead of starting one",
     )
     ui.set_defaults(func=cmd_ui)
+
+    desk = sub.add_parser(
+        "desktop", help="run ARC in the menu bar, summoned by double-tapping \u2318"
+    )
+    desk.add_argument("--port", type=int, default=None, help="port for the local server")
+    desk.add_argument(
+        "--no-serve",
+        action="store_true",
+        help="attach to a server that is already running instead of starting one",
+    )
+    desk.set_defaults(func=cmd_desktop)
 
     voice = sub.add_parser("voice", help="check, grant, or test speech support")
     voice.set_defaults(func=cmd_voice)

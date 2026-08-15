@@ -69,7 +69,10 @@ include = ["arc*"]
 # package data. Without this it is missing from an installed ARC and `arc serve`
 # returns 404 for the UI while working fine from a source checkout.
 [tool.setuptools.package-data]
-arc = ["interface/webui/*.html", "interface/webui/*.css", "interface/webui/*.js"]
+arc = [
+    "interface/webui/*.html", "interface/webui/*.css", "interface/webui/*.js",
+    "desktop/ui/*.html", "desktop/ui/*.css", "desktop/ui/*.js",
+]
 
 [tool.ruff]
 line-length = 100
