@@ -467,6 +467,13 @@ def cmd_model(args: argparse.Namespace) -> int:
         return 0
 
     if args.model_command == "use":
+        from arc.model.registry import load_registry
+
+        registry = load_registry(config)
+        entry = registry.get(args.key)
+        if entry is not None and entry.backend == "anthropic":
+            _maybe_prompt_for_anthropic_key()
+
         target = manager.use(config, args.key, args.role)
         print(f"{args.role} model set to {args.key!r} (written to {target})")
         return 0
@@ -476,7 +483,70 @@ def cmd_model(args: argparse.Namespace) -> int:
         print(f"removed {path}")
         return 0
 
+    if args.model_command == "auth":
+        from arc.model.registry import load_registry
+
+        registry = load_registry(config)
+        entry = registry.get(args.key)
+        if entry is None:
+            raise ConfigError(
+                f"unknown model {args.key!r}. Available: {', '.join(sorted(registry)) or 'none'}"
+            )
+        if entry.backend != "anthropic":
+            raise ConfigError(
+                f"{args.key!r} uses the {entry.backend!r} backend, which has no API key to set."
+            )
+        _prompt_and_save_anthropic_key(required=True)
+        return 0
+
     raise ConfigError(f"unknown model subcommand {args.model_command!r}")
+
+
+def _maybe_prompt_for_anthropic_key() -> None:
+    """Offer to collect an Anthropic API key when switching to a Claude model.
+
+    Only prompts in an interactive terminal, and only if no key is already
+    configured. Skippable on purpose — the user can decline and set it later with
+    `arc model auth claude`, or export ANTHROPIC_API_KEY, without that blocking the
+    switch itself.
+    """
+    from arc.model.anthropic_backend import load_api_key
+
+    if load_api_key() is not None:
+        return
+    if not sys.stdin.isatty():
+        print(
+            "note: no Anthropic API key configured yet. Set one with `arc model auth claude`, "
+            "or ANTHROPIC_API_KEY, before using this model.",
+            file=sys.stderr,
+        )
+        return
+    _prompt_and_save_anthropic_key(required=False)
+
+
+def _prompt_and_save_anthropic_key(*, required: bool) -> None:
+    """Prompt for an Anthropic API key on stdin and save it if one is given."""
+    import getpass
+
+    from arc.model.anthropic_backend import save_api_key
+
+    print("Anthropic API key — get one at https://console.anthropic.com/settings/keys")
+    prompt = "API key: " if required else "API key (leave blank to skip): "
+    try:
+        key = getpass.getpass(prompt).strip()
+    except (EOFError, KeyboardInterrupt):
+        key = ""
+        print()
+
+    if not key:
+        if required:
+            print("no key entered; run `arc model auth claude` again when you have one.")
+        else:
+            print("skipped. Run `arc model auth claude` later, or export ANTHROPIC_API_KEY.")
+        return
+
+    target = save_api_key(key)
+    print(f"saved to {target}")
 
 
 def _memory_service(config: Config, audit: AuditLogger | None = None) -> Any:
@@ -1260,6 +1330,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     remove = model_sub.add_parser("remove", help="delete a model's local weights")
     remove.add_argument("key", help="registry key")
+
+    auth = model_sub.add_parser(
+        "auth", help="set the API key for a cloud model (e.g. `arc model auth claude`)"
+    )
+    auth.add_argument("key", help="registry key of a cloud (anthropic-backed) model")
 
     mem = sub.add_parser("memory", help="inspect and manage long-term memory")
     mem.set_defaults(func=cmd_memory)

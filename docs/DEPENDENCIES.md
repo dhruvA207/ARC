@@ -31,8 +31,10 @@ machine with no backend at all. `arc/model/router.py` imports these lazily and r
 error when one is missing.
 
 ```bash
-pip install 'arc[mlx]'       # Apple Silicon
-pip install 'arc[llamacpp]'  # anywhere
+pip install 'arc[mlx]'        # Apple Silicon
+pip install 'arc[llamacpp]'   # anywhere
+pip install 'arc[ollama]'     # default chat backend — a local Ollama daemon
+pip install 'arc[anthropic]'  # opt-in cloud backend (Claude)
 ```
 
 | Package | Version | Licence | Verified | Why it is here |
@@ -40,6 +42,10 @@ pip install 'arc[llamacpp]'  # anywhere
 | mlx-lm | 0.31.3 | MIT | 2026-07-28 | Apple Silicon fast path. Unified memory means no host-to-device copy; measurably faster than llama.cpp's Metal path on this machine. |
 | llama-cpp-python | — | MIT | 2026-07-28 | Portable GGUF backend: CPU, Metal, and CUDA. The backend that survives the Windows move unchanged. |
 | huggingface-hub | 1.25.1 | Apache-2.0 | 2026-07-29 | Weight downloads for `arc model pull`. Pulled in transitively by mlx-lm anyway. |
+| ollama | — | MIT | 2026-08-19 | Client for the default chat backend (docs/DECISIONS.md ADR-025) — a locally-served model, weights outside ARC's own management. The package itself is Apache/MIT-clean; the models it serves are not (see the note below). |
+| anthropic | — | MIT | 2026-08-19 | Client for the opt-in Claude backend. Same distinction as above: the SDK is MIT, the hosted model behind it is not open-weight at all. |
+
+**Note on model weights vs. code dependencies.** §0.1's Apache/MIT rule is about code — libraries ARC's own code depends on and redistributes. It was never a rule about model *weights*, and `arc/model/registry.py` enforcing it there for locally-bundled weights (mlx/llamacpp entries) was ARC's own stricter choice, not something §0.1 requires. Ollama-served Llama models carry Meta's community licence, and Claude is a hosted proprietary API — neither is a code dependency, so neither is bound by this table. See docs/DECISIONS.md ADR-025.
 
 ## Development dependencies
 

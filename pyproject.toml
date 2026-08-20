@@ -27,6 +27,14 @@ llamacpp = [
     "llama-cpp-python>=0.3",  # MIT — portable GGUF: CPU/Metal/CUDA
     "huggingface-hub>=0.23",  # Apache-2.0
 ]
+# The default chat backend: a local Ollama daemon (docs/DECISIONS.md ADR-025).
+ollama = [
+    "ollama>=0.4",  # MIT
+]
+# Opt-in cloud backend for when the local model isn't enough.
+anthropic = [
+    "anthropic>=0.40",  # MIT
+]
 # Speech in and out. Apple's frameworks rather than Whisper: mlx-whisper is MIT itself
 # but pulls torch/scipy/numba/numpy (BSD-2, BSD-3, BSL-1.0) and tqdm (MPL-2.0), which
 # breaks the Apache-2.0/MIT rule in §0.1 — and ~3 GB against an 11.5 GB budget.

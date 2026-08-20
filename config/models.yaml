@@ -1,58 +1,65 @@
 # Model registry.
 #
-# Every licence below was verified against the live Hugging Face model card on the date
-# recorded, per docs/BRIEF.md §3 — never from memory. arc/model/registry.py rejects any
-# entry whose licence is not Apache-2.0 or MIT, so this cannot drift silently.
+# Two families here, on purpose (docs/DECISIONS.md ADR-025):
 #
-# Deliberately NOT here: Llama (Meta community licence — neither Apache nor MIT), and
-# anything tagged research-only or non-commercial.
+# - `ollama` entries run on this machine through a local Ollama daemon. Their weights
+#   are not downloaded or managed by ARC — `ollama pull`/`ollama rm` own that — so the
+#   Apache-2.0/MIT gate in arc/model/registry.py does not apply to them; Meta's Llama
+#   community licence is fine here.
+# - `anthropic` entries are a hosted API call with no local weights at all. They need
+#   an Anthropic API key (`arc model auth claude`) and are opt-in: switch to one with
+#   `arc model use <key> chat` when a task wants more reasoning power than the local
+#   model, and switch back the same way.
+#
+# Local-only used to be a hard rule here; it isn't anymore (docs/BRIEF.md item 1).
 
 registry:
-  qwen3-4b-instruct:
-    backend: mlx
-    repo: mlx-community/Qwen3-4B-Instruct-2507-4bit
-    licence: Apache-2.0
-    licence_verified: "2026-07-29"
+  llama3.1-8b-instruct:
+    backend: ollama
+    repo: llama3.1:8b-instruct-q4_K_M
+    licence: "Llama 3.1 Community License"
+    licence_verified: "2026-08-19"
     quantization: 4-bit
-    context_length: 32768
-    approx_size_gb: 2.3
+    context_length: 8192
+    approx_size_gb: 4.9
     capabilities:
-      # Native 262144 on the base model. Capped here: KV cache at that length would
-      # need far more memory than this machine has, and a context you cannot fill is
-      # a footgun rather than a feature. Raise it on a machine that can afford it.
-      max_context: 32768
+      # Native 128k on the base model. Capped here for the same reason ADR-010 capped
+      # Qwen3: this is a fanless 16 GB MacBook Air with ~11.5 GB reachable by a model,
+      # and KV cache at 128k would eat the headroom an 8B model's weights leave behind.
+      max_context: 8192
       native_tool_calling: true
       json_mode: true
       vision: false
       thinking: false
     notes: >-
-      Default chat model. Chosen over the 8B because this machine is a fanless MacBook
-      Air: both fit in memory, but the 4B stays responsive through a long session where
-      the 8B throttles. See docs/DECISIONS.md ADR-010.
+      Default chat model, served locally by Ollama. `ollama pull llama3.1:8b-instruct-q4_K_M`
+      before first use. The 70B and 405B Llama 3.1 tags exist in Ollama's library but do
+      not fit this machine's 11.5 GB budget — see docs/DECISIONS.md ADR-025.
 
-  qwen3-8b:
-    backend: mlx
-    repo: mlx-community/Qwen3-8B-4bit
-    licence: Apache-2.0
-    licence_verified: "2026-07-29"
-    quantization: 4-bit
-    context_length: 32768
-    approx_size_gb: 4.5
+  claude-opus:
+    backend: anthropic
+    repo: claude-opus-5
+    licence: "Anthropic commercial API — hosted, no local weights"
+    licence_verified: "2026-08-19"
+    context_length: 200000
+    approx_size_gb: null
     capabilities:
-      max_context: 32768
+      max_context: 200000
       native_tool_calling: true
       json_mode: true
-      vision: false
+      vision: true
       thinking: true
     notes: >-
-      Stronger reasoning and a thinking mode, at roughly twice the weights. Fits this
-      machine's 11.5 GB but will throttle on sustained use. Prefer it for hard one-off
-      tasks rather than as the daily driver.
+      Opt-in cloud model for when local reasoning isn't enough — heavier analysis,
+      research, multi-step work. Needs an Anthropic API key: `arc model auth claude`
+      prompts for one on first use (skippable; set it later the same way, or export
+      ANTHROPIC_API_KEY). Switch to it with `arc model use claude-opus chat`, switch
+      back with `arc model use llama3.1-8b-instruct chat`.
 
 # Which registry entry serves each role. `arc model use` writes the machine-local
 # override to ~/.arc/config.yaml so switching models never dirties the committed file.
 active:
-  chat: qwen3-4b-instruct
+  chat: llama3.1-8b-instruct
   vision: null      # Phase 6
   embedding: null   # Phase 3
 

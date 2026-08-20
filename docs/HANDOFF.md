@@ -131,18 +131,21 @@ and was verified end to end.
 ### 7. Probe the machine and fetch weights
 
 ```bash
-.venv/bin/arc probe                        # writes a fresh ~/.arc/hardware.json
-.venv/bin/arc doctor                       # read the "recommended model" line
-.venv/bin/arc model pull qwen3-4b-instruct # 2.12 GB
-.venv/bin/arc model use qwen3-4b-instruct
+.venv/bin/arc probe                              # writes a fresh ~/.arc/hardware.json
+.venv/bin/arc doctor                             # read the "recommended model" line
+ollama pull llama3.1:8b-instruct-q4_K_M          # ~4.9 GB, via the Ollama daemon
+.venv/bin/arc model use llama3.1-8b-instruct
 ```
 
-The registry (`config/models.yaml`) holds two entries: `qwen3-4b-instruct` (2.12 GB) and
-`qwen3-8b` (~4.5 GB). Which is right depends on the new machine — the old one was a
-16 GB M3 Air with ~11.5 GB realistically usable, where both fit but the 8B throttled
-after 10–20 minutes because the Air is fanless (ADR-010). **If the new Mac has more
-memory or a fan, that trade-off changes** and `qwen3-8b` may simply be the better
-default. Let `arc doctor` tell you rather than assuming.
+The registry (`config/models.yaml`) holds one local entry, `llama3.1-8b-instruct`
+(~4.9 GB, served by Ollama rather than downloaded by ARC — see ADR-025), and one opt-in
+cloud entry, `claude-opus`, for when local reasoning isn't enough (`arc model auth claude`,
+then `arc model use claude-opus chat`). Whether the local Llama tag is still the right
+default depends on the new machine — the old one was a 16 GB M3 Air with ~11.5 GB
+realistically usable and fanless (ADR-006, ADR-007), which is what capped it at 8B/4-bit
+rather than a larger Ollama tag. **If the new Mac has more memory or a fan, a bigger tag
+may be the better default** — `ollama pull llama3.1:70b-instruct-q4_K_M` needs roughly
+40 GB. Let `arc doctor` tell you rather than assuming.
 
 The embedding model (`BAAI/bge-small-en-v1.5`, ~130 MB) downloads itself on first use.
 

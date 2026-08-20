@@ -54,7 +54,7 @@ cp -R ~/arc-backup/audit ~/arc-backup/tasks ~/.arc/
 
 arc doctor                     # confirms the tree is readable
 arc memory stats               # confirms the memories came back
-arc model pull qwen3-4b-instruct   # weights were deliberately not backed up
+ollama pull llama3.1:8b-instruct-q4_K_M   # weights were deliberately not backed up
 ```
 
 **Do not copy `hardware.json` from a backup.** It describes the machine as it was, and

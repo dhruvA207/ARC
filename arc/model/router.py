@@ -32,6 +32,11 @@ _BACKEND_REQUIREMENTS: dict[str, frozenset[str]] = {
     "vllm": frozenset({"cuda"}),
     "transformers": frozenset({"cuda", "mps", "cpu"}),
     "custom": frozenset({"mlx", "metal", "cuda", "cpu"}),
+    # Neither delegates compute to this machine's accelerators: Ollama's daemon
+    # decides its own device placement, and Anthropic's models run on Anthropic's
+    # hardware. Empty requirement set means "always eligible" below.
+    "ollama": frozenset(),
+    "anthropic": frozenset(),
 }
 
 
@@ -82,6 +87,12 @@ def choose_backend(entry: ModelEntry, config: Config) -> BackendChoice:
 
     accelerators = set(available_accelerators())
     required = _BACKEND_REQUIREMENTS.get(entry.backend, frozenset())
+
+    # An empty requirement set means the backend does not run on this machine's
+    # accelerators at all — it delegates elsewhere (a local daemon, a remote API) — so
+    # there is nothing to match against and it is always eligible.
+    if not required:
+        return BackendChoice(backend=entry.backend, reason=f"{entry.backend} runs off-machine")
 
     if required & accelerators:
         matched = sorted(required & accelerators)[0]
@@ -155,6 +166,26 @@ def load_model(config: Config, role: str = "chat") -> LanguageModel:
             path = path / entry.filename
         return LlamaCppModel(
             path,
+            context_length=entry.context_length,
+            capabilities=entry.capabilities,
+            name=entry.key,
+        )
+
+    if choice.backend == "ollama":
+        from arc.model.ollama_backend import OllamaModel
+
+        return OllamaModel(
+            entry.repo,
+            context_length=entry.context_length,
+            capabilities=entry.capabilities,
+            name=entry.key,
+        )
+
+    if choice.backend == "anthropic":
+        from arc.model.anthropic_backend import ClaudeModel
+
+        return ClaudeModel(
+            entry.repo,
             context_length=entry.context_length,
             capabilities=entry.capabilities,
             name=entry.key,

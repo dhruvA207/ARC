@@ -17,11 +17,22 @@ from arc.config import Config
 from arc.errors import ConfigError
 from arc.model.base import ModelCapabilities
 
-#: Licences permitted by docs/BRIEF.md §0.1. An entry with anything else is a hard
-#: error, not a warning — the whole point is that this cannot drift.
+#: Licences permitted by docs/BRIEF.md §0.1 for weights ARC downloads and bundles into
+#: ``~/.arc/models/``. An entry with anything else is a hard error, not a warning — the
+#: whole point is that this cannot drift.
 _ALLOWED_LICENCES = frozenset({"Apache-2.0", "MIT"})
 
-_VALID_BACKENDS = frozenset({"mlx", "llamacpp", "vllm", "transformers", "custom"})
+#: Backends that never put weights under ARC's own management: Ollama runs its own
+#: model store under whatever licence the model ships with, and Anthropic's models are
+#: a hosted API call with no weights at all. §0.1's Apache/MIT rule was written for code
+#: and weights ARC redistributes; neither applies here, so these two are exempt from
+#: ``_ALLOWED_LICENCES`` rather than stretching that set to cover them. See
+#: docs/DECISIONS.md ADR-025.
+_LICENCE_EXEMPT_BACKENDS = frozenset({"ollama", "anthropic"})
+
+_VALID_BACKENDS = frozenset(
+    {"mlx", "llamacpp", "vllm", "transformers", "custom", "ollama", "anthropic"}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,7 +140,7 @@ def parse_entry(key: str, raw: Any) -> ModelEntry:
         )
 
     licence = str(raw["licence"])
-    if licence not in _ALLOWED_LICENCES:
+    if backend not in _LICENCE_EXEMPT_BACKENDS and licence not in _ALLOWED_LICENCES:
         raise ConfigError(
             f"model {key!r} is {licence}, which BRIEF §0.1 forbids. "
             f"Only {sorted(_ALLOWED_LICENCES)} are permitted."

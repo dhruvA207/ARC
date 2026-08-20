@@ -584,3 +584,55 @@ and discarded by the original — now corroborates the landmark geometry, so a c
 is off-angle for one test can still be caught by the other. And pinch is tested *before*
 the two-finger cursor pose: pinching rarely curls the middle finger, so the cursor test
 was claiming pinches and routing a two-handed resize to the mouse.
+
+---
+
+## ADR-025 — Qwen/MLX dropped for Ollama; Claude added as an opt-in cloud toggle
+
+**Decision.** `config/models.yaml` no longer lists Qwen3-4B or Qwen3-8B. The default chat
+model is now `llama3.1-8b-instruct`, served locally by a self-managed Ollama daemon rather
+than loaded in-process via MLX. A second entry, `claude-opus` (Anthropic's API, backend
+`anthropic`), is available as an explicit opt-in: `arc model use claude-opus chat` when a
+task wants more reasoning power than the local model has, `arc model use
+llama3.1-8b-instruct chat` to switch back. Local-only stops being a hard rule — BRIEF item 1
+is rewritten accordingly.
+
+**Why.** Requested directly: replace the MLX/Qwen stack with Ollama running the biggest
+Llama that fits this machine, and make Claude available on demand for analysis, research,
+and other work the local model isn't strong enough for. The `LanguageModel` interface
+(ADR-011) already existed exactly to make a swap like this a config change, not a rewrite —
+`arc/model/ollama_backend.py` and `arc/model/anthropic_backend.py` are two more
+implementations of the same five-method contract, nothing more privileged than
+`mlx_backend.py` or `llamacpp.py` were.
+
+**Licence handling.** §0.1's Apache-2.0/MIT rule is about code dependencies ARC redistributes.
+`arc/model/registry.py` had extended that rule to model weights too, which is why Llama was
+explicitly excluded before this change. That extension was ARC's own stricter choice, not
+something §0.1 itself requires, and it stops applying to two backends that never put weights
+under ARC's management: `ollama` (the daemon owns its own model store, under whatever licence
+the model ships with — Meta's community licence for Llama) and `anthropic` (a hosted API call,
+no weights at all). `_LICENCE_EXEMPT_BACKENDS` in `registry.py` names exactly those two; every
+other backend still enforces Apache-2.0/MIT as before. See docs/DEPENDENCIES.md.
+
+**Sizing.** `llama3.1:8b-instruct-q4_K_M` (~4.9 GB) is the largest Llama 3.1 tag that leaves
+headroom in this machine's ~11.5 GB budget (docs/DECISIONS.md ADR-006, ADR-007); the 70B and
+405B tags exist in Ollama's library but do not fit. Context is capped at 8192 for the same
+reason ADR-010 capped Qwen at 32768 rather than its native window: KV cache cost, not weight
+size, is what actually threatens headroom on a fanless chassis.
+
+**Auth.** Anthropic has no consumer OAuth login for third-party apps — that mechanism is
+Claude Code's own, using a client Anthropic issues only to its own products. So `arc model
+auth claude` (or the prompt `arc model use claude-opus chat` offers automatically, in an
+interactive terminal, when no key is configured yet) asks for a plain API key from
+console.anthropic.com and writes it to `config/secrets.yaml`, the same gitignored file
+`gemini_api_key` already lives in (`arc/voice/gemini.py`). The prompt is skippable — declining
+does not block the model switch, it just means `generate()`/`stream()` will raise a clear
+`ModelError` naming the fix until a key exists, via `ANTHROPIC_API_KEY`,
+`config/secrets.yaml`, or `~/.arc/secrets.yaml`.
+
+**Cost, stated plainly.** `arc/model/ollama_backend.py.count_tokens` is a `len(text) // 4`
+heuristic, not a real tokenizer — Ollama exposes no tokenize endpoint short of loading the
+GGUF a second time through llama.cpp just to count, which would double the resident memory
+for a number the working-memory budget only needs to be roughly right about. Every other
+backend in this codebase counts with the model's actual tokenizer; this is a deliberate,
+documented exception, not an oversight.

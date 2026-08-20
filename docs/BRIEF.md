@@ -85,7 +85,11 @@ permissive.
 
 **ARC** — my personal, local-first, fully-owned AI assistant. It needs to:
 
-1. Run a language model **locally** on my machine. No cloud API required for core reasoning.
+1. Run a language model **locally** on my machine by default — Ollama, serving whatever open
+   model fits. Local-only used to be a hard requirement here; it isn't anymore. A cloud model
+   (Claude, via the Anthropic API) is available as an opt-in toggle for when a task wants more
+   reasoning power than the local model has — switched to on purpose, not a silent fallback. See
+   docs/DECISIONS.md ADR-025.
 2. Have **persistent long-term memory** — a real memory system, not a chat log — that accumulates
    knowledge about me, my files, my projects, and past conversations across sessions.
 3. Have **unrestricted local access** — read/write any file, run any command, launch and control any

@@ -190,9 +190,15 @@ def test_malformed_entry_in_registry_names_the_key(config_dir: Path) -> None:
 
 
 def test_committed_registry_is_valid() -> None:
-    """The real config/models.yaml must parse and satisfy the licence rule."""
+    """The real config/models.yaml must parse and satisfy the licence rule.
+
+    ``ollama`` and ``anthropic`` entries are exempt from the Apache-2.0/MIT gate
+    (ADR-025): neither puts weights under ARC's own management, so §0.1's rule for
+    redistributed code and weights does not apply to them.
+    """
     registry = load_registry(Config.load(use_env=False))
     assert registry, "registry should not be empty by Phase 2"
     for entry in registry.values():
-        assert entry.licence in {"Apache-2.0", "MIT"}
+        if entry.backend not in {"ollama", "anthropic"}:
+            assert entry.licence in {"Apache-2.0", "MIT"}
         assert entry.licence_verified
