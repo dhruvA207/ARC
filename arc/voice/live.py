@@ -26,6 +26,7 @@ import asyncio
 import contextlib
 import queue
 import threading
+import time
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -42,6 +43,11 @@ SEND_RATE = 16000
 RECEIVE_RATE = 24000
 CHANNELS = 1
 BLOCK = 1024
+
+#: How long the microphone stays gated after the last audio was written to the
+#: output device. Covers the device's own buffer latency, which is the gap where
+#: ARC used to hear the end of its own sentence and answer it.
+ECHO_HANGOVER_SECONDS = 0.45
 
 #: Same voice JARVIS uses.
 DEFAULT_VOICE = "Iapetus"
@@ -64,9 +70,16 @@ class LiveSession:
         model: str = LIVE_MODEL,
         system_prompt: str = "",
         silence_ms: int = 400,
-        on_transcript: Callable[[str, bool], None] | None = None,
+        #: ``(text, final, role)`` where role is 'user' or 'assistant'. Live carries
+        #: both sides of the conversation on one channel, and a UI that cannot tell
+        #: them apart shows ARC's own reply back as though you had said it.
+        on_transcript: Callable[[str, bool, str], None] | None = None,
         on_level: Callable[[float], None] | None = None,
         on_state: Callable[[str], None] | None = None,
+        #: ``(call_id, name, running)``. Live dispatches tools itself, and without
+        #: this nothing downstream can tell that work is happening — the UI showed a
+        #: fixed number of markers whether one tool ran or five.
+        on_tool: Callable[[str, str, bool], None] | None = None,
         audit: Any = None,
         tools: Sequence[str] = (),
         echo_suppression: bool = True,
@@ -91,6 +104,7 @@ class LiveSession:
         self._on_transcript = on_transcript
         self._on_level = on_level
         self._on_state = on_state
+        self._on_tool = on_tool
         self._audit = audit
 
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -103,6 +117,8 @@ class LiveSession:
         self._running = threading.Event()
         self._error: str | None = None
         self._speaking = False
+        #: When audio was last written to the output device. See ``_hearing_itself``.
+        self._last_output_at = 0.0
         self._muted = True
         #: Transcription accumulators; see ``_handle_transcriptions``.
         self._in_text = ""
@@ -310,8 +326,23 @@ class LiveSession:
                 stream.close()
 
     def _hearing_itself(self) -> bool:
-        """Whether anything ARC is saying is still coming out of the speakers."""
-        return self._speaking or not self._audio_out.empty()
+        """Whether anything ARC is saying is still coming out of the speakers.
+
+        The queue going empty is *not* the end of playback. ``stream.write`` returns
+        once the audio device has accepted a chunk into its own buffer, not once the
+        speaker has finished sounding it, so for a few hundred milliseconds after the
+        last chunk is handed over ARC is still audibly talking. Reopening the
+        microphone in that window feeds ARC its own closing words, which the Live
+        API's eager activity detection reads as the user starting to speak — the
+        session then answers its own tail, or cuts itself off mid-reply.
+
+        So the gate stays shut for ``ECHO_HANGOVER_SECONDS`` past the last write. The
+        cost is that voice barge-in is impossible for that long after ARC stops;
+        Escape remains the reliable way to interrupt, and always was.
+        """
+        if self._speaking or not self._audio_out.empty():
+            return True
+        return (time.monotonic() - self._last_output_at) < ECHO_HANGOVER_SECONDS
 
     async def _send(self) -> None:
         queue = self._out_queue
@@ -412,7 +443,16 @@ class LiveSession:
         for function_call in getattr(call, "function_calls", None) or []:
             name = getattr(function_call, "name", "")
             args = dict(getattr(function_call, "args", None) or {})
-            result = await asyncio.to_thread(self._run_tool, name, args)
+            call_id = str(getattr(function_call, "id", None) or f"{name}-{id(function_call)}")
+
+            self._emit_tool(call_id, name, True)
+            try:
+                result = await asyncio.to_thread(self._run_tool, name, args)
+            finally:
+                # In a finally block: a tool that raises must still clear its marker,
+                # or the UI shows work in progress that ended some time ago.
+                self._emit_tool(call_id, name, False)
+
             responses.append(
                 types.FunctionResponse(
                     id=getattr(function_call, "id", None),
@@ -482,14 +522,14 @@ class LiveSession:
 
                 text = getattr(response, "text", None)
                 if text and self._on_transcript is not None:
-                    self._on_transcript(text, False)
+                    self._on_transcript(text, False, "assistant")
 
                 content = getattr(response, "server_content", None)
                 if content is not None:
                     self._handle_transcriptions(content)
                     if getattr(content, "turn_complete", False):
                         if self._out_text and self._on_transcript is not None:
-                            self._on_transcript(self._out_text, True)
+                            self._on_transcript(self._out_text, True, "assistant")
                         self._in_text = ""
                         self._out_text = ""
                         self._speaking = False
@@ -521,7 +561,7 @@ class LiveSession:
         chunk = getattr(block, "text", None) if block is not None else None
         if chunk:
             self._in_text += chunk
-            self._on_transcript(self._in_text, False)
+            self._on_transcript(self._in_text, False, "user")
 
         block = getattr(content, "output_transcription", None)
         chunk = getattr(block, "text", None) if block is not None else None
@@ -529,10 +569,10 @@ class LiveSession:
             # ARC starting to answer means your question is finished; flush it so the
             # UI shows a settled question rather than a half-built one.
             if self._in_text:
-                self._on_transcript(self._in_text, True)
+                self._on_transcript(self._in_text, True, "user")
                 self._in_text = ""
             self._out_text += chunk
-            self._on_transcript(self._out_text, False)
+            self._on_transcript(self._out_text, False, "assistant")
 
     def _play_thread(self) -> None:
         """Play received audio on a plain thread.
@@ -558,6 +598,9 @@ class LiveSession:
                 if chunk is None:
                     return
                 stream.write(chunk)
+                # Marks when audio was last handed to the device, which is what the
+                # echo gate measures its hangover from.
+                self._last_output_at = time.monotonic()
         except Exception:  # pragma: no cover - playback must not kill the session
             _log.exception("playback failed")
         finally:
@@ -566,6 +609,15 @@ class LiveSession:
                 stream.close()
 
     # ── helpers ──────────────────────────────────────────────────────────────
+
+    def _emit_tool(self, call_id: str, name: str, running: bool) -> None:
+        """Report a tool starting or finishing. Never raises into the session."""
+        if self._on_tool is None:
+            return
+        try:
+            self._on_tool(call_id, name, running)
+        except Exception:  # pragma: no cover - a listener must not break the call
+            _log.exception("tool listener failed")
 
     def _emit_state(self, state: str) -> None:
         if self._on_state is not None:

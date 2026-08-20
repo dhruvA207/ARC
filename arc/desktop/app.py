@@ -49,7 +49,7 @@ class DesktopApp:
     def toggle_mute(self) -> bool:
         """Flip the microphone. Returns the new muted state for the menu title."""
         self._muted = not self._muted
-        self._panel.set_activity("MUTED" if self._muted else "IDLE")
+        self._panel.set_muted(self._muted)
         _log.info("microphone toggled", extra={"muted": self._muted})
         return self._muted
 
@@ -92,9 +92,10 @@ class DesktopApp:
             _log.warning("menu bar item could not be installed")
 
         self._panel.build()
-        # Parked, not centred: appearing over whatever the user is doing the instant ARC
-        # starts would be the opposite of getting out of the way.
-        self._panel.show(panel.CORNER, animate=False)
+        # First run gets the full-screen arrival, then packs itself into the corner. After
+        # that ARC is resident: parked, not centred, because appearing over whatever the
+        # user is doing would be the opposite of getting out of the way.
+        self._panel.intro()
 
         self._hotkey = DoubleTapCommand(self.toggle)
         if not self._hotkey.install():

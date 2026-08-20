@@ -680,3 +680,25 @@ def test_the_two_features_are_described_as_different_things() -> None:
     control = registry.get("start_screen_control").schema().description.lower()
     assert "not the camera" in control
     assert "enable_camera_gestures" in control
+
+
+def test_live_transcripts_say_which_side_is_speaking() -> None:
+    """Live carries your speech and ARC's reply on one channel.
+
+    A client that cannot tell them apart shows ARC's own answer back as though you had
+    said it, and — worse — could feed it back in as a new question.
+    """
+    from pathlib import Path
+
+    source = Path("arc/voice/live.py").read_text(encoding="utf-8")
+    assert '"assistant")' in source
+    assert '"user")' in source
+    assert "on_transcript: Callable[[str, bool, str], None] | None" in source
+
+
+def test_the_events_stream_carries_the_transcript_role() -> None:
+    from pathlib import Path
+
+    source = Path("arc/interface/server.py").read_text(encoding="utf-8")
+    assert '"role": role' in source
+    assert '"role": "user"' in source, "the Apple recogniser only ever hears the microphone"

@@ -26,6 +26,15 @@ _log = get_logger(__name__)
 CENTRE = "centre"
 CORNER = "corner"
 
+#: First run only. The panel briefly covers the whole screen so the orbs can converge
+#: from the actual left and right edges rather than from the edges of a 720pt window —
+#: the arrival is meant to read as ARC gathering itself out of the machine.
+SPLASH = "splash"
+
+#: How long the full-screen arrival is left on screen before it packs down to the corner.
+#: Long enough to see the convergence land, short enough not to be in the way.
+SPLASH_SECONDS = 1.15
+
 #: Centre is sized for a conversation; corner is sized for an orb and a line of status.
 CENTRE_SIZE = (720.0, 520.0)
 CORNER_SIZE = (280.0, 132.0)
@@ -64,6 +73,9 @@ class OrbPanel:
         # visibleFrame excludes the menu bar and Dock, which is what keeps the corner
         # position from sliding under the menu bar on a laptop display.
         area = screen.visibleFrame()
+
+        if state == SPLASH:
+            return area
 
         if state == CENTRE:
             width, height = CENTRE_SIZE
@@ -182,6 +194,35 @@ class OrbPanel:
         # rather than after it.
         self._notify_page(state)
 
+    def intro(self) -> None:
+        """First run: converge across the whole screen, then pack down to the corner.
+
+        The panel is screen-sized for the length of the arrival so the orbs come in from
+        the real edges of the display. It ignores the mouse while it is that size — a
+        transparent window covering the screen that also swallowed clicks would be a
+        genuinely hostile way to start.
+        """
+        import AppKit
+
+        if self._window is None:
+            self.build()
+
+        self._window.setFrame_display_(self._frame_for(SPLASH), False)
+        self._window.setIgnoresMouseEvents_(True)
+        self._window.orderFrontRegardless()
+
+        self._state = SPLASH
+        # The page only knows two geometries; `centre` is what makes the orb play its
+        # arrival, which is the animation wanted here.
+        self._notify_page(CENTRE)
+
+        def settle(_timer: Any) -> None:
+            self._window.setIgnoresMouseEvents_(False)
+            self._state = CENTRE  # so set_state sees a real change and animates
+            self.set_state(CORNER)
+
+        AppKit.NSTimer.scheduledTimerWithTimeInterval_repeats_block_(SPLASH_SECONDS, False, settle)
+
     def hide(self) -> None:
         if self._window is not None:
             self._window.orderOut_(None)
@@ -207,11 +248,20 @@ class OrbPanel:
 
     def set_activity(self, activity: str) -> None:
         """THINKING, WORKING, IDLE — drives the coloured orbs on the page."""
+        self._call(f"setActivity({activity!r})")
+
+    def set_muted(self, muted: bool) -> None:
+        """Mute closes the microphone; unmute reopens it if the panel is centred."""
+        self._call(f"setMuted({'true' if muted else 'false'})")
+
+    def _call(self, expression: str) -> None:
+        """Call into the page, tolerating a webview that has not finished loading."""
         if self._webview is None:
             return
-        script = f"window.arcDesktop && window.arcDesktop.setActivity({activity!r})"
         with _Suppressed():
-            self._webview.evaluateJavaScript_completionHandler_(script, None)
+            self._webview.evaluateJavaScript_completionHandler_(
+                f"window.arcDesktop && window.arcDesktop.{expression}", None
+            )
 
 
 class _Suppressed:

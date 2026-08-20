@@ -183,9 +183,10 @@ class Runtime:
                 voice=str(section.get("voice", "Iapetus")),
                 silence_ms=int(section.get("silence_ms", 400)),
                 system_prompt=DEFAULT_SYSTEM,
-                on_transcript=lambda text, final: self._push_transcript_text(text, final),
+                on_transcript=self._push_transcript_text,
                 on_level=self._push_level,
                 on_state=self._push_state,
+                on_tool=self._push_tool,
                 audit=audit,
                 # An allowlist, not the registry: in this mode Gemini decides what to
                 # call, so each name is a capability granted to a remote model.
@@ -195,17 +196,47 @@ class Runtime:
         )
         return self._voice
 
+    def _push_tool(self, call_id: str, name: str, running: bool) -> None:
+        """Report one tool starting or finishing on the events stream.
+
+        Named to match the ``tool_start``/``tool_end`` pair the agent loop already
+        emits, so a client has one contract to implement rather than two.
+        """
+        from arc.tools import registry
+
+        event = "tool_start" if running else "tool_end"
+        payload: dict[str, Any] = {"call_id": call_id, "name": name}
+        if running:
+            payload["category"] = registry.category_of(name)
+        else:
+            payload["ok"] = True
+        for queue in list(self.listeners):
+            queue.append((event, payload))
+
     def _push_state(self, activity: str) -> None:
         for queue in list(self.listeners):
             queue.append(("state", {"activity": activity}))
 
-    def _push_transcript_text(self, text: str, final: bool) -> None:
+    def _push_transcript_text(self, text: str, final: bool, role: str = "user") -> None:
+        """Forward one transcript fragment.
+
+        ``role`` matters in live mode, where Gemini's own reply arrives on the same
+        channel as your speech. A client that cannot tell them apart displays ARC's
+        answer back to you as though you had said it.
+        """
         for queue in list(self.listeners):
-            queue.append(("transcript", {"text": text, "final": final}))
+            queue.append(("transcript", {"text": text, "final": final, "role": role}))
 
     def _push_transcript(self, transcript: Any) -> None:
+        # The Apple recogniser only ever transcribes the microphone, so this side is
+        # always the user.
         for queue in list(self.listeners):
-            queue.append(("transcript", {"text": transcript.text, "final": transcript.is_final}))
+            queue.append(
+                (
+                    "transcript",
+                    {"text": transcript.text, "final": transcript.is_final, "role": "user"},
+                )
+            )
 
     def _push_level(self, level: float) -> None:
         # Coalesced rather than queued: levels arrive ~90 times a second and only the

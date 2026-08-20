@@ -115,6 +115,8 @@ class MenuBar:
         summon.setTarget_(self._delegate)
         menu.addItem_(summon)
 
+        menu.addItem_(AppKit.NSMenuItem.separatorItem())
+
         self._mute_entry = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
             "Mute", objc.selector(self._delegate.toggleMute_, signature=b"v@:@"), ""
         )
