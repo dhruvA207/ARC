@@ -111,7 +111,7 @@ disallow_untyped_defs = true
 # --strict meaningful for our own code instead of failing on third-party gaps.
 [[tool.mypy.overrides]]
 module = [
-    "mlx.*", "mlx_lm.*", "llama_cpp.*", "huggingface_hub.*",
+    "mlx.*", "mlx_lm.*", "llama_cpp.*", "huggingface_hub.*", "ollama.*", "anthropic.*",
     "sqlite_vec.*", "onnxruntime.*", "tokenizers.*",
     "Quartz.*", "AppKit.*", "objc.*", "ApplicationServices.*",
     "Vision.*", "Foundation.*", "Speech.*", "AVFoundation.*", "WebKit.*",

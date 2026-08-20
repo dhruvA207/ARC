@@ -36,7 +36,7 @@ registry:
       before first use. The 70B and 405B Llama 3.1 tags exist in Ollama's library but do
       not fit this machine's 11.5 GB budget — see docs/DECISIONS.md ADR-025.
 
-  claude-opus:
+  claude:
     backend: anthropic
     repo: claude-opus-5
     licence: "Anthropic commercial API — hosted, no local weights"
@@ -53,7 +53,7 @@ registry:
       Opt-in cloud model for when local reasoning isn't enough — heavier analysis,
       research, multi-step work. Needs an Anthropic API key: `arc model auth claude`
       prompts for one on first use (skippable; set it later the same way, or export
-      ANTHROPIC_API_KEY). Switch to it with `arc model use claude-opus chat`, switch
+      ANTHROPIC_API_KEY). Switch to it with `arc model use claude chat`, switch
       back with `arc model use llama3.1-8b-instruct chat`.
 
 # Which registry entry serves each role. `arc model use` writes the machine-local

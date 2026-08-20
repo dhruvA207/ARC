@@ -470,8 +470,8 @@ def cmd_model(args: argparse.Namespace) -> int:
         from arc.model.registry import load_registry
 
         registry = load_registry(config)
-        entry = registry.get(args.key)
-        if entry is not None and entry.backend == "anthropic":
+        target_entry = registry.get(args.key)
+        if target_entry is not None and target_entry.backend == "anthropic":
             _maybe_prompt_for_anthropic_key()
 
         target = manager.use(config, args.key, args.role)
@@ -487,14 +487,15 @@ def cmd_model(args: argparse.Namespace) -> int:
         from arc.model.registry import load_registry
 
         registry = load_registry(config)
-        entry = registry.get(args.key)
-        if entry is None:
+        auth_entry = registry.get(args.key)
+        if auth_entry is None:
             raise ConfigError(
                 f"unknown model {args.key!r}. Available: {', '.join(sorted(registry)) or 'none'}"
             )
-        if entry.backend != "anthropic":
+        if auth_entry.backend != "anthropic":
             raise ConfigError(
-                f"{args.key!r} uses the {entry.backend!r} backend, which has no API key to set."
+                f"{args.key!r} uses the {auth_entry.backend!r} backend, "
+                "which has no API key to set."
             )
         _prompt_and_save_anthropic_key(required=True)
         return 0

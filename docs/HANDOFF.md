@@ -139,8 +139,8 @@ ollama pull llama3.1:8b-instruct-q4_K_M          # ~4.9 GB, via the Ollama daemo
 
 The registry (`config/models.yaml`) holds one local entry, `llama3.1-8b-instruct`
 (~4.9 GB, served by Ollama rather than downloaded by ARC — see ADR-025), and one opt-in
-cloud entry, `claude-opus`, for when local reasoning isn't enough (`arc model auth claude`,
-then `arc model use claude-opus chat`). Whether the local Llama tag is still the right
+cloud entry, `claude`, for when local reasoning isn't enough (`arc model auth claude`,
+then `arc model use claude chat`). Whether the local Llama tag is still the right
 default depends on the new machine — the old one was a 16 GB M3 Air with ~11.5 GB
 realistically usable and fanless (ADR-006, ADR-007), which is what capped it at 8B/4-bit
 rather than a larger Ollama tag. **If the new Mac has more memory or a fan, a bigger tag

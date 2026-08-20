@@ -149,7 +149,9 @@ class OllamaModel(LanguageModel):
         content = message.get("content") if isinstance(message, dict) else message.content
         tool_calls = message.get("tool_calls") if isinstance(message, dict) else message.tool_calls
         done_reason = raw.get("done_reason") if isinstance(raw, dict) else raw.done_reason
-        prompt_eval = raw.get("prompt_eval_count") if isinstance(raw, dict) else raw.prompt_eval_count
+        prompt_eval = (
+            raw.get("prompt_eval_count") if isinstance(raw, dict) else raw.prompt_eval_count
+        )
         eval_count = raw.get("eval_count") if isinstance(raw, dict) else raw.eval_count
 
         return Completion(
@@ -224,5 +226,6 @@ def _parse_tool_calls(raw: list[Any] | None) -> list[ToolCall]:
             _log.warning("dropping tool call with non-object arguments", extra={"tool": name})
             continue
         call_id = entry.get("id") if isinstance(entry, dict) else getattr(entry, "id", None)
-        calls.append(ToolCall(id=str(call_id or uuid.uuid4().hex[:12]), name=name, arguments=arguments))
+        call_id_str = str(call_id or uuid.uuid4().hex[:12])
+        calls.append(ToolCall(id=call_id_str, name=name, arguments=arguments))
     return calls

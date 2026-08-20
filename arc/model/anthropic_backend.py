@@ -3,7 +3,7 @@
 Everything else in ``arc/model/`` runs on this machine; this is the one exception,
 by design (docs/DECISIONS.md ADR-025). It exists for the tasks where the local model's
 size genuinely isn't enough — heavy analysis, research, hard multi-step reasoning — and
-the user switches to it on purpose with ``arc model use claude-opus chat``, not as a
+the user switches to it on purpose with ``arc model use claude chat``, not as a
 silent fallback.
 
 ``anthropic`` (the Python SDK) is MIT (docs/DEPENDENCIES.md). It is an optional
@@ -17,7 +17,6 @@ below, which mirrors ``arc/voice/gemini.py``'s reasoning exactly.
 from __future__ import annotations
 
 import os
-import uuid
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any

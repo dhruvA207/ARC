@@ -591,8 +591,8 @@ was claiming pinches and routing a two-handed resize to the mouse.
 
 **Decision.** `config/models.yaml` no longer lists Qwen3-4B or Qwen3-8B. The default chat
 model is now `llama3.1-8b-instruct`, served locally by a self-managed Ollama daemon rather
-than loaded in-process via MLX. A second entry, `claude-opus` (Anthropic's API, backend
-`anthropic`), is available as an explicit opt-in: `arc model use claude-opus chat` when a
+than loaded in-process via MLX. A second entry, `claude` (Anthropic's API, backend
+`anthropic`), is available as an explicit opt-in: `arc model use claude chat` when a
 task wants more reasoning power than the local model has, `arc model use
 llama3.1-8b-instruct chat` to switch back. Local-only stops being a hard rule — BRIEF item 1
 is rewritten accordingly.
@@ -622,7 +622,7 @@ size, is what actually threatens headroom on a fanless chassis.
 
 **Auth.** Anthropic has no consumer OAuth login for third-party apps — that mechanism is
 Claude Code's own, using a client Anthropic issues only to its own products. So `arc model
-auth claude` (or the prompt `arc model use claude-opus chat` offers automatically, in an
+auth claude` (or the prompt `arc model use claude chat` offers automatically, in an
 interactive terminal, when no key is configured yet) asks for a plain API key from
 console.anthropic.com and writes it to `config/secrets.yaml`, the same gitignored file
 `gemini_api_key` already lives in (`arc/voice/gemini.py`). The prompt is skippable — declining
