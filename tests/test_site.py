@@ -227,7 +227,7 @@ def test_the_arc_application_is_untouched() -> None:
 
 
 def test_the_launcher_still_starts_the_application_not_the_site() -> None:
-    """`ARC` in a terminal must keep opening the app window, not the new web build."""
+    """`ARC` in a terminal must keep launching ARC itself, not the new web build."""
     launcher = (ROOT / "bin" / "ARC").read_text(encoding="utf-8")
-    assert "-m arc ui" in launcher
+    assert "-m arc desktop" in launcher
     assert "web/serve.py" not in launcher

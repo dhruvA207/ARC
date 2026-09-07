@@ -26,7 +26,7 @@ def test_the_launcher_exists_and_is_executable() -> None:
 def test_bare_arc_opens_the_app() -> None:
     """No arguments must mean "launch", not "show me the usage message"."""
     body = LAUNCHER.read_text(encoding="utf-8")
-    assert "-m arc ui" in body
+    assert "-m arc desktop" in body
 
 
 def test_it_does_nothing_but_launch() -> None:
@@ -43,7 +43,7 @@ def test_it_launches_detached_so_the_terminal_stays_usable() -> None:
     body = LAUNCHER.read_text(encoding="utf-8")
     assert "nohup" in body
     assert "exec " not in body
-    assert 'nohup "$PY" -u -m arc ui' in body
+    assert 'nohup "$PY" -u -m arc desktop' in body
 
 
 def test_it_does_not_start_a_second_copy() -> None:

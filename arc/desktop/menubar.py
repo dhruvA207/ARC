@@ -105,12 +105,12 @@ class MenuBar:
         bar = AppKit.NSStatusBar.systemStatusBar()
         item = bar.statusItemWithLength_(AppKit.NSVariableStatusItemLength)
         item.button().setImage_(_icon())
-        item.button().setToolTip_("ARC — double-tap ⌘ to summon")
+        item.button().setToolTip_("ARC — double-tap ⌘ to wake")
 
         menu = AppKit.NSMenu.alloc().init()
 
         summon = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            "Summon ARC", objc.selector(self._delegate.summon_, signature=b"v@:@"), ""
+            "Wake ARC", objc.selector(self._delegate.summon_, signature=b"v@:@"), ""
         )
         summon.setTarget_(self._delegate)
         menu.addItem_(summon)
@@ -142,6 +142,15 @@ class MenuBar:
         item.setMenu_(menu)
         self._item = item
         return True
+
+    def set_muted(self, muted: bool) -> None:
+        """Sync the title when mute is flipped from somewhere other than this menu.
+
+        Double-tapping ⌘ is the usual way to wake ARC, and without this the menu would
+        still be offering to "Mute" something that is already resting.
+        """
+        self._muted = bool(muted)
+        self._refresh_mute()
 
     def _refresh_mute(self) -> None:
         if self._mute_entry is not None:

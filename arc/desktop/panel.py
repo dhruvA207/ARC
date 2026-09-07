@@ -2,7 +2,7 @@
 
 Three differences from ``arc/interface/app.py``, and all three are the point:
 
-* **It does not take focus.** ``NSNonactivatingPanelMask`` means summoning ARC over your
+* **It does not take focus.** ``NSNonactivatingPanelMask`` means ARC waking up over your
   editor does not deactivate the editor. You keep your cursor, your selection, and your
   undo stack.
 * **It floats above everything.** A window level above normal windows, and a collection
@@ -10,9 +10,15 @@ Three differences from ``arc/interface/app.py``, and all three are the point:
   from wherever you are rather than being a window you have to go and find.
 * **It has no chrome.** Borderless and transparent, because the orb is the interface.
 
-Two geometries: CENTRE, where it is the thing you are talking to, and CORNER, where it has
-shrunk to the top right to get out of your way while it works. Moving between them is a
-frame animation, and the page is told which state it is in so the orb can animate to match.
+**One geometry.** It parks in the top-right corner and stays there — it never throws
+itself into the middle of the screen. What changes is not where it is but how awake it is,
+and that is :meth:`OrbPanel.set_muted`: resting, it is click-through, so the corner of the
+screen behind it stays usable; woken, it takes the pointer back and listens.
+
+Because a resting panel is click-through it sees no mouse events of its own, and the orb
+still has to know when the cursor is near enough to move aside for. That is what
+:meth:`OrbPanel._pointer_tick` is: a screen-space read of the cursor, forwarded to the page
+only when it is close enough to matter.
 """
 
 from __future__ import annotations
@@ -23,26 +29,34 @@ from arc.log import get_logger
 
 _log = get_logger(__name__)
 
-CENTRE = "centre"
+#: The only state the panel has a position for. ``CENTRE`` survives as the cue the page
+#: turns into its arrival animation — it is not a place the window goes any more.
 CORNER = "corner"
+CENTRE = "centre"
 
-#: First run only. The panel briefly covers the whole screen so the orbs can converge
-#: from the actual left and right edges rather than from the edges of a 720pt window —
-#: the arrival is meant to read as ARC gathering itself out of the machine.
-SPLASH = "splash"
+#: Square, so the orb can deform in any direction without running out of canvas — the
+#: points swing a long way aside when the cursor parts them.
+CORNER_SIZE = (300.0, 300.0)
 
-#: How long the full-screen arrival is left on screen before it packs down to the corner.
-#: Long enough to see the convergence land, short enough not to be in the way.
-SPLASH_SECONDS = 1.15
+#: Gap from the screen edges, below the menu bar.
+CORNER_MARGIN = 12.0
 
-#: Centre is sized for a conversation; corner is sized for an orb and a line of status.
-CENTRE_SIZE = (720.0, 520.0)
-CORNER_SIZE = (280.0, 132.0)
-
-#: Gap from the screen edges when parked in the corner, below the menu bar.
-CORNER_MARGIN = 16.0
-
+#: Matches TRANSITION_SECONDS in ui/orb.js, so the points converge at the rate the page
+#: thinks they do.
 TRANSITION_SECONDS = 0.34
+
+#: How long the arrival is left running before the page is told it has settled.
+ARRIVAL_SECONDS = 0.9
+
+#: How often the cursor is sampled while ARC is on screen.
+POINTER_HZ = 60.0
+
+#: The cursor has to be almost touching the orb before it reacts: `near` is 1 within this
+#: many points of the orb's edge, and ramps to 0 over `POINTER_FALLOFF_PT` beyond that.
+#: Kept tight on purpose — an orb that flinched at a cursor halfway across the screen
+#: would be noise. This is a courtesy to whatever is behind ARC, not a hover target.
+POINTER_NEAR_PT = 24.0
+POINTER_FALLOFF_PT = 64.0
 
 
 def available() -> bool:
@@ -63,31 +77,43 @@ class OrbPanel:
         self._window: Any = None
         self._webview: Any = None
         self._state = CORNER
+        self._pointer_timer: Any = None
+        self._pointer_active = False
 
     # ── geometry ────────────────────────────────────────────────────────
 
-    def _frame_for(self, state: str) -> Any:
+    def _current_screen(self) -> Any:
+        """The display the cursor is on, or the main one if that cannot be determined.
+
+        ``NSScreen.mainScreen`` is "the screen with the key window", which for an
+        accessory app with no key window is whichever display the frontmost *other*
+        application happens to be on. On a two-display desk that put ARC on the external
+        monitor while the user was working on the laptop, with no way to tell it was even
+        running. The cursor is the better answer to "which screen is the user at".
+        """
         import AppKit
 
-        screen = AppKit.NSScreen.mainScreen()
+        location = AppKit.NSEvent.mouseLocation()
+        for screen in AppKit.NSScreen.screens():
+            frame = screen.frame()
+            if (
+                frame.origin.x <= location.x < frame.origin.x + frame.size.width
+                and frame.origin.y <= location.y < frame.origin.y + frame.size.height
+            ):
+                return screen
+        return AppKit.NSScreen.mainScreen()
+
+    def _corner_frame(self) -> Any:
+        """Where ARC lives: top right of the display the user is currently at."""
+        import AppKit
+
         # visibleFrame excludes the menu bar and Dock, which is what keeps the corner
         # position from sliding under the menu bar on a laptop display.
-        area = screen.visibleFrame()
+        area = self._current_screen().visibleFrame()
 
-        if state == SPLASH:
-            return area
-
-        if state == CENTRE:
-            width, height = CENTRE_SIZE
-            x = area.origin.x + (area.size.width - width) / 2
-            # Slightly above true centre: centred text sits low to the eye, and this is
-            # roughly where Spotlight puts itself for the same reason.
-            y = area.origin.y + (area.size.height - height) / 2 + area.size.height * 0.08
-        else:
-            width, height = CORNER_SIZE
-            x = area.origin.x + area.size.width - width - CORNER_MARGIN
-            y = area.origin.y + area.size.height - height - CORNER_MARGIN
-
+        width, height = CORNER_SIZE
+        x = area.origin.x + area.size.width - width - CORNER_MARGIN
+        y = area.origin.y + area.size.height - height - CORNER_MARGIN
         return AppKit.NSMakeRect(x, y, width, height)
 
     # ── lifecycle ───────────────────────────────────────────────────────
@@ -105,13 +131,15 @@ class OrbPanel:
         )
 
         window = AppKit.NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
-            self._frame_for(CORNER), style, AppKit.NSBackingStoreBuffered, False
+            self._corner_frame(), style, AppKit.NSBackingStoreBuffered, False
         )
 
         window.setOpaque_(False)
         window.setBackgroundColor_(AppKit.NSColor.clearColor())
-        window.setHasShadow_(True)
-        window.setMovableByWindowBackground_(True)
+        # No shadow and not draggable: it is a fixed resident of the corner, and a shadow
+        # would draw a faint rectangle around a window whose whole point is having no edge.
+        window.setHasShadow_(False)
+        window.setMovableByWindowBackground_(False)
         # Above ordinary windows but below the screen saver and system alerts. Floating is
         # the level Apple uses for palettes; anything higher would sit over dialogs, which
         # is antisocial.
@@ -124,6 +152,9 @@ class OrbPanel:
         # Without this the panel vanishes the moment you click your editor.
         window.setHidesOnDeactivate_(False)
         window.setReleasedWhenClosed_(False)
+        # ARC starts at rest, and a resting panel must not swallow clicks aimed at the
+        # corner of the screen behind it.
+        window.setIgnoresMouseEvents_(True)
 
         config = WebKit.WKWebViewConfiguration.alloc().init()
         webview = WebKit.WKWebView.alloc().initWithFrame_configuration_(
@@ -140,6 +171,7 @@ class OrbPanel:
 
         self._window = window
         self._webview = webview
+        self._start_pointer_tracking()
 
     # ── state ───────────────────────────────────────────────────────────
 
@@ -147,99 +179,114 @@ class OrbPanel:
     def state(self) -> str:
         return self._state
 
-    def show(self, state: str = CENTRE, *, animate: bool = True) -> None:
-        """Bring the panel on screen in the given geometry."""
-        import AppKit
-
+    def show(self) -> None:
+        """Bring the panel on screen, in the corner, without taking focus."""
         if self._window is None:
             self.build()
 
-        first_time = not self._window.isVisible()
-        if first_time:
-            # Placed before it is shown, so it does not appear in the old spot and slide.
-            self._window.setFrame_display_(self._frame_for(state), False)
+        if not self._window.isVisible():
+            # Placed before it is shown, so it never appears in a stale spot and slides.
+            self._window.setFrame_display_(self._corner_frame(), False)
 
         # orderFrontRegardless, not makeKeyAndOrderFront: the panel must appear without
         # ARC becoming the active application and stealing the user's focus.
         self._window.orderFrontRegardless()
-        self.set_state(state, animate=animate and not first_time)
-
-        if state == CENTRE:
-            # Only when centred does it accept typing, and even then the app behind stays
-            # active — a non-activating panel can be key without its owner being frontmost.
-            self._window.makeKeyWindow()
-            AppKit.NSApp.activateIgnoringOtherApps_(False)
-
-    def set_state(self, state: str, *, animate: bool = True) -> None:
-        """Move between centre and corner."""
-        import AppKit
-
-        if self._window is None or state == self._state:
-            self._notify_page(state)
-            self._state = state
-            return
-
-        target = self._frame_for(state)
-        if animate:
-            context = AppKit.NSAnimationContext.currentContext()
-            AppKit.NSAnimationContext.beginGrouping()
-            context.setDuration_(TRANSITION_SECONDS)
-            self._window.animator().setFrame_display_(target, True)
-            AppKit.NSAnimationContext.endGrouping()
-        else:
-            self._window.setFrame_display_(target, True)
-
-        self._state = state
-        # Told before the frame settles so the orb animation runs alongside the move
-        # rather than after it.
-        self._notify_page(state)
 
     def intro(self) -> None:
-        """First run: converge across the whole screen, then pack down to the corner.
+        """First run: the points converge into the orb, in the corner where it lives.
 
-        The panel is screen-sized for the length of the arrival so the orbs come in from
-        the real edges of the display. It ignores the mouse while it is that size — a
-        transparent window covering the screen that also swallowed clicks would be a
-        genuinely hostile way to start.
+        There is no full-screen arrival any more. ARC appears where it is going to stay.
         """
         import AppKit
 
         if self._window is None:
             self.build()
 
-        self._window.setFrame_display_(self._frame_for(SPLASH), False)
+        self._window.setFrame_display_(self._corner_frame(), False)
         self._window.setIgnoresMouseEvents_(True)
         self._window.orderFrontRegardless()
+        self._state = CORNER
 
-        self._state = SPLASH
-        # The page only knows two geometries; `centre` is what makes the orb play its
-        # arrival, which is the animation wanted here.
+        # The page reads anything that is not `corner` as "play the arrival".
         self._notify_page(CENTRE)
 
         def settle(_timer: Any) -> None:
-            self._window.setIgnoresMouseEvents_(False)
-            self._state = CENTRE  # so set_state sees a real change and animates
-            self.set_state(CORNER)
+            self._notify_page(CORNER)
 
-        AppKit.NSTimer.scheduledTimerWithTimeInterval_repeats_block_(SPLASH_SECONDS, False, settle)
+        AppKit.NSTimer.scheduledTimerWithTimeInterval_repeats_block_(ARRIVAL_SECONDS, False, settle)
 
     def hide(self) -> None:
         if self._window is not None:
             self._window.orderOut_(None)
 
-    def toggle(self) -> None:
-        """What the hotkey calls: centre it, or park it if it is already centred."""
-        if self._window is None or not self._window.isVisible():
-            self.show(CENTRE)
-        elif self._state == CENTRE:
-            self.show(CORNER)
+    # ── pointer proximity ───────────────────────────────────────────────
+
+    def _start_pointer_tracking(self) -> None:
+        """Sample the cursor and tell the page when it comes close enough to part the orb.
+
+        A timer rather than an event monitor. A resting panel is deliberately
+        click-through, so it is not in the responder chain and receives no mouse events at
+        all; ``NSEvent.mouseLocation`` is a screen-space read that does not need to be.
+        """
+        import AppKit
+
+        if self._pointer_timer is not None:
+            return
+
+        def tick(_timer: Any) -> None:
+            with _Suppressed():
+                self._pointer_tick()
+
+        self._pointer_timer = AppKit.NSTimer.scheduledTimerWithTimeInterval_repeats_block_(
+            1.0 / POINTER_HZ, True, tick
+        )
+
+    def _pointer_tick(self) -> None:
+        """One sample: cursor position in the page's coordinates, and how close it is."""
+        import AppKit
+
+        if self._window is None or self._webview is None or not self._window.isVisible():
+            return
+
+        location = AppKit.NSEvent.mouseLocation()
+        frame = self._window.frame()
+
+        # AppKit's screen origin is bottom-left and the page's is top-left, so y flips.
+        x = location.x - frame.origin.x
+        y = frame.origin.y + frame.size.height - location.y
+
+        # Must agree with ui/orb.js `_draw`, which is where these two numbers come from.
+        orb_x = frame.size.width / 2.0
+        orb_y = frame.size.height * 0.46
+        orb_radius = min(frame.size.width, frame.size.height) * 0.3
+
+        distance = ((x - orb_x) ** 2 + (y - orb_y) ** 2) ** 0.5
+        edge = orb_radius + POINTER_NEAR_PT
+        if distance <= edge:
+            near = 1.0
+        elif distance >= edge + POINTER_FALLOFF_PT:
+            near = 0.0
         else:
-            self.show(CENTRE)
+            near = 1.0 - (distance - edge) / POINTER_FALLOFF_PT
+
+        # Nothing to say while the cursor is elsewhere — but the *first* frame after it
+        # leaves still has to be sent, or the cloud stays parted around a cursor that has
+        # gone.
+        if near <= 0.0 and not self._pointer_active:
+            return
+        self._pointer_active = near > 0.0
+
+        with _Suppressed():
+            self._webview.evaluateJavaScript_completionHandler_(
+                "window.arcDesktop && window.arcDesktop.setPointer("
+                f"{x:.1f}, {y:.1f}, {near:.3f})",
+                None,
+            )
 
     # ── page bridge ─────────────────────────────────────────────────────
 
     def _notify_page(self, state: str) -> None:
-        """Tell the UI which geometry it is in so the orb can animate to match."""
+        """Tell the UI which state it is in so the orb can animate to match."""
         if self._webview is None:
             return
         script = f"window.arcDesktop && window.arcDesktop.setState({state!r})"
@@ -247,11 +294,25 @@ class OrbPanel:
             self._webview.evaluateJavaScript_completionHandler_(script, None)
 
     def set_activity(self, activity: str) -> None:
-        """THINKING, WORKING, IDLE — drives the coloured orbs on the page."""
+        """THINKING, WORKING, IDLE — drives the coloured satellites on the page."""
         self._call(f"setActivity({activity!r})")
 
     def set_muted(self, muted: bool) -> None:
-        """Mute closes the microphone; unmute reopens it if the panel is centred."""
+        """Rest or wake — the only thing about this panel that changes.
+
+        Resting: the darker blue, the microphone shut, and the pointer passes straight
+        through, so the top-right corner of the screen is still somewhere you can click.
+        Woken: purple, listening, and the panel takes the pointer back.
+        """
+        if self._window is not None:
+            with _Suppressed():
+                self._window.setIgnoresMouseEvents_(bool(muted))
+                if not muted:
+                    # Waking is the one moment it is allowed to move: onto the display
+                    # the user is currently at. It never moves while it rests, so it does
+                    # not wander around under you.
+                    self._window.setFrame_display_(self._corner_frame(), True)
+                    self._window.orderFrontRegardless()
         self._call(f"setMuted({'true' if muted else 'false'})")
 
     def _call(self, expression: str) -> None:

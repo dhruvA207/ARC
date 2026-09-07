@@ -5,9 +5,9 @@
  * and the same property means its text field can never reliably take the keyboard. A
  * composer you cannot click into is worse than no composer. Use the web UI to type.
  *
- * The native side drives geometry and mute; it never talks to the API itself. Everything
- * that reaches ARC goes through this file, so there is one place where a request is made
- * and one place where a failure is reported.
+ * The native side drives mute and the cursor position; it never talks to the API itself.
+ * Everything that reaches ARC goes through this file, so there is one place where a
+ * request is made and one place where a failure is reported.
  */
 
 import { Orb } from './orb.js';
@@ -28,7 +28,8 @@ const turns = [];
 let inFlight = null;
 
 let listening = false;
-let muted = false;
+// ARC arrives at rest; the native side unmutes it when you wake it.
+let muted = true;
 /** Tools running right now: call id -> category. One satellite each. */
 const activeTools = new Map();
 /** Live mode answers and speaks by itself, so the transcript must NOT be posted to
@@ -42,13 +43,10 @@ let answersItself = false;
 
 window.arcDesktop = {
   setState(state) {
+    // Geometry no longer means anything — the panel never leaves the corner. `centre`
+    // survives as the cue for the arrival animation on first load, and nothing else.
     document.body.dataset.state = state;
-    orb.setState(state === 'centre' ? 'arriving' : 'leaving');
-
-    // Summoning opens the microphone: being summoned *is* the cue to start talking.
-    // Parking closes it — nothing listens to you while ARC is out of the way.
-    if (state === 'centre' && !muted) setMic(true);
-    else if (state !== 'centre') setMic(false);
+    orb.setState(state === 'corner' ? 'resting' : 'arriving');
   },
 
   setActivity(activity) {
@@ -57,17 +55,26 @@ window.arcDesktop = {
   },
 
   setMuted(next) {
+    // The one thing that changes about this panel: resting or awake. The microphone and
+    // the colour follow from it, and so does whether the panel is worth showing text in.
     muted = Boolean(next);
-    if (muted) setMic(false);
-    else if (document.body.dataset.state === 'centre') setMic(true);
+    document.body.dataset.muted = muted ? 'true' : 'false';
+    setMic(!muted);
     // Mute is its own axis on the orb, not an activity. Folding it into setActivity
     // meant every SPEAKING/IDLE event from live mode silently un-muted it.
     orb.setMuted(muted);
-    status.textContent = muted ? 'muted' : '';
+  },
+
+  // Where the cursor is, in page pixels, and how close it is to the orb — 0 far enough
+  // to ignore, 1 close enough to part the cloud. The native side reads this off the
+  // screen because a resting panel is click-through and gets no mouse events at all.
+  setPointer(x, y, near) {
+    orb.setPointer(x, y, near);
   },
 };
 
 document.body.dataset.state = 'corner';
+document.body.dataset.muted = 'true';
 
 // ── microphone ──────────────────────────────────────────────────────────
 

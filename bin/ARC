@@ -1,12 +1,15 @@
 #!/bin/bash
 # ARC launcher — type `ARC` in any terminal to start it.
 #
-#   ARC     # opens ARC in its own window, with the loopback server behind it
+#   ARC     # runs ARC as a menu bar resident, with the loopback server behind it
 #
 # That is the whole of it. It launches ARC and does nothing else: no subcommands, no
 # flags, no second job. The CLI is its own thing and lives in the repo — see below.
 #
-# It launches DETACHED, the way `code` does: the window opens, the prompt comes
+# It launches the desktop shell (`arc desktop`): no Dock icon, no window to find,
+# just the orb in the menu bar and a floating panel summoned by double-tapping ⌘.
+#
+# It launches DETACHED, the way `code` does: the orb appears, the prompt comes
 # straight back, and the terminal stays yours. ARC's output goes to the log file
 # named at the bottom of this script rather than over whatever you type next, and
 # closing the terminal does not take ARC down with it.
@@ -53,9 +56,9 @@ if [ $# -ne 0 ]; then
   exit 2
 fi
 
-# Don't launch a second copy. Two windows would fight over the server port, the
+# Don't launch a second copy. Two would fight over the server port, the
 # microphone, and the input-control lock.
-if pgrep -f "\-m arc ui" >/dev/null 2>&1; then
+if pgrep -f "\-m arc desktop" >/dev/null 2>&1; then
   echo "ARC is already running."
   exit 0
 fi
@@ -66,5 +69,5 @@ mkdir -p "$(dirname "$LOG")"
 # `python -m arc` rather than the console script: it works from a plain checkout
 # whether or not `pip install -e .` has been run. `-u` so the log is readable while
 # ARC is still running instead of only after it exits.
-( cd "$ROOT" && nohup "$PY" -u -m arc ui > "$LOG" 2>&1 & )
-echo "ARC launching…  (window opens shortly · log: $LOG)"
+( cd "$ROOT" && nohup "$PY" -u -m arc desktop > "$LOG" 2>&1 & )
+echo "ARC launching…  (menu bar orb appears shortly · log: $LOG)"

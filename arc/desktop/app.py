@@ -1,10 +1,13 @@
 """ARC as a resident of the machine rather than an application you launch.
 
 Runs as an *accessory* app: no Dock icon, no application menu, nothing in the app
-switcher. The only permanent trace is the orb in the menu bar. Double-tap ⌘ brings the
-panel to the centre of the screen; double-tap again parks it in the top-right corner,
-where it stays — running, reachable, out of the way — until it is wanted again. Nothing
-is quit and restarted between conversations.
+switcher. The only permanent trace is the orb in the menu bar and the orb in the corner.
+
+**The panel does not move.** It parks in the top-right and stays there. Double-tap ⌘ wakes
+it — unmutes the microphone and lets it take the pointer — and double-tap again sends it
+back to rest. The menu bar's Mute / Unmute does exactly the same thing, for when you would
+rather not use the hotkey; both go through :meth:`DesktopApp.toggle_mute` so they cannot
+drift apart. Nothing is quit and restarted between conversations.
 
 The UI is served by the ARC process it talks to, so the panel is a client like any other
 front end and conversations are shared through ``/conversations`` rather than kept here.
@@ -35,21 +38,38 @@ class DesktopApp:
         self._panel = panel.OrbPanel(ui_url)
         self._menu: menubar.MenuBar | None = None
         self._hotkey: Any = None
-        self._muted = False
+        # ARC arrives at rest. Waking it is a deliberate act.
+        self._muted = True
         self._app: Any = None
 
     # ── actions the menu and hotkey call ────────────────────────────────
 
     def summon(self) -> None:
-        self._panel.show(panel.CENTRE)
+        """Menu bar 'Wake ARC' — bring the panel forward and open the microphone."""
+        self._panel.show()
+        if self._muted:
+            self.toggle_mute()
 
     def toggle(self) -> None:
-        self._panel.toggle()
+        """Double-tap ⌘: wake ARC, or send it back to rest.
+
+        It used to move the panel to the middle of the screen and back. It no longer
+        moves at all — waking means the microphone opens, the orb turns purple, and the
+        panel stops being click-through, which is the only sense in which ARC is ever
+        "in front of" anything.
+        """
+        self.toggle_mute()
 
     def toggle_mute(self) -> bool:
-        """Flip the microphone. Returns the new muted state for the menu title."""
+        """Flip the microphone. Returns the new muted state for the menu title.
+
+        The single path for both the hotkey and the menu item, so the menu title can
+        never disagree with what the orb is doing.
+        """
         self._muted = not self._muted
         self._panel.set_muted(self._muted)
+        if self._menu is not None:
+            self._menu.set_muted(self._muted)
         _log.info("microphone toggled", extra={"muted": self._muted})
         return self._muted
 
@@ -90,11 +110,12 @@ class DesktopApp:
         )
         if not self._menu.install():
             _log.warning("menu bar item could not be installed")
+        self._menu.set_muted(self._muted)
 
         self._panel.build()
-        # First run gets the full-screen arrival, then packs itself into the corner. After
-        # that ARC is resident: parked, not centred, because appearing over whatever the
-        # user is doing would be the opposite of getting out of the way.
+        # The points converge into the orb, in the corner, which is where it then stays.
+        # Appearing over whatever the user is doing would be the opposite of getting out
+        # of the way, so it never does.
         self._panel.intro()
 
         self._hotkey = DoubleTapCommand(self.toggle)

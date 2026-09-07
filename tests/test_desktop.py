@@ -146,12 +146,33 @@ def test_the_orb_reacts_to_the_microphone() -> None:
     assert "this.level > this._level ? 14 : 4" in orb
 
 
-def test_muting_changes_the_colour() -> None:
-    """Mute is a live state you need to notice from across the desk, so it gets a hue."""
+def test_awake_and_resting_each_have_their_own_hue() -> None:
+    """Purple when it is listening, a darker blue when it is not.
+
+    The colour is the only signal for mute you can read from across the desk, so the two
+    states get hues rather than shades of the same one.
+    """
     orb = (UI / "orb.js").read_text(encoding="utf-8")
-    assert "MUTED_RGB" in orb
+    assert "LIVE_RGB" in orb and "RESTING_RGB" in orb
+    assert "purple" in orb.lower()
     # A muted orb must not twitch to a level packet arriving before the mic closes.
     assert "if (this.muted) return;" in orb
+
+
+def test_the_colour_change_sweeps_through_the_cloud_rather_than_snapping() -> None:
+    """Not an instant swap.
+
+    A front travels through the points — outward from the core when ARC wakes, inward
+    when it settles — and the circles it is passing over flare as it goes. That sweep is
+    the whole reason the orb reads as something alive rather than an indicator light.
+    """
+    orb = (UI / "orb.js").read_text(encoding="utf-8")
+    assert "MUTE_MORPH_SECONDS" in orb
+    assert "_muteAnim" in orb
+    assert "_drawMorph(" in orb
+    # Direction depends on which way mute went; without this it would sweep the same way
+    # both times and waking would look identical to settling.
+    assert "const spreading = !this.muted;" in orb
 
 
 def test_mute_is_not_derived_from_the_activity_string() -> None:
@@ -183,24 +204,26 @@ def test_the_animation_loop_survives_a_bad_frame() -> None:
     assert "catch (error)" in body
 
 
-def test_point_colour_is_chosen_per_band_not_per_point() -> None:
+def test_the_settled_orb_colours_per_band_not_per_point() -> None:
     """Assigning fillStyle from a template string parses a CSS colour every time.
 
     At 1500 points a frame that is ~90,000 string allocations a second, which is what
-    made the orb stutter and drop frames while the microphone was open.
+    made the orb stutter and drop frames while the microphone was open. Only the mute
+    sweep is allowed to colour per point, and only for the under-a-second it lasts; the
+    path the orb is on the rest of the time has to stay on the twelve-band ramp.
     """
     orb = (UI / "orb.js").read_text(encoding="utf-8")
     assert "const BANDS" in orb
-    points = orb[orb.index("  _points(cx, cy, radius) {") : orb.index("  _satelliteStack")]
-    assert points.count("ctx.fillStyle") <= 2, "fillStyle is still set per point"
+    steady = orb[orb.index("  _drawSteady(blend, level) {") : orb.index("  _drawMorph(")]
+    assert steady.count("ctx.fillStyle") <= 2, "fillStyle is still set per point at rest"
 
 
-def test_the_centred_orb_sits_on_a_tinted_backdrop() -> None:
+def test_the_orb_sits_on_a_tint_of_whatever_colour_it_currently_is() -> None:
     """The tint follows the orb's own colour, so the points read against something."""
     orb = (UI / "orb.js").read_text(encoding="utf-8")
     assert "_backdrop(cx, cy, radius)" in orb
     backdrop = orb[orb.index("  _backdrop(cx, cy, radius) {") : orb.index("  _points(cx")]
-    assert "this.muted ? MUTED_RGB : ACTIVE_RGB" in backdrop
+    assert "this.muted ? RESTING_RGB : LIVE_RGB" in backdrop
     # Contained inside the cloud. An earlier version reached 2.6x the radius, clipped to
     # a hard edge along the top of the panel, and needed a ring to hide the seam.
     assert "2.6" not in backdrop
@@ -310,8 +333,100 @@ def test_the_shell_has_no_dock_icon() -> None:
     assert "NSApplicationActivationPolicyAccessory" in source
 
 
+# --- the corner resident ------------------------------------------------------------
+
+
+def test_the_panel_rests_in_the_corner_and_never_recentres() -> None:
+    """It used to throw itself into the middle of the screen when summoned.
+
+    It doesn't any more: there is one position, and waking changes how ARC behaves rather
+    than where it is. Anything that animates the frame between two geometries is the old
+    design creeping back.
+    """
+    source = (ROOT / "arc" / "desktop" / "panel.py").read_text(encoding="utf-8")
+    assert "_corner_frame" in source
+    assert "animator().setFrame_display_" not in source, "the panel is moving again"
+
+    app = (ROOT / "arc" / "desktop" / "app.py").read_text(encoding="utf-8")
+    assert "panel.CENTRE" not in app, "something is still sending the panel to the centre"
+
+
+def test_double_tap_command_wakes_by_unmuting() -> None:
+    """The hotkey opens the microphone; it no longer just moves a window about."""
+    app = (ROOT / "arc" / "desktop" / "app.py").read_text(encoding="utf-8")
+
+    toggle = app[app.index("    def toggle(self)") : app.index("    def toggle_mute(self)")]
+    assert "toggle_mute()" in toggle
+
+    # One path for the hotkey and the menu, or the menu title ends up describing a state
+    # ARC is not in.
+    mute = app[app.index("    def toggle_mute(self)") : app.index("    def open_web(self)")]
+    assert "self._menu.set_muted" in mute
+
+    menubar = (ROOT / "arc" / "desktop" / "menubar.py").read_text(encoding="utf-8")
+    assert "def set_muted(self" in menubar
+    assert "toggleMute_" in menubar, "the menu bar lost its mute control"
+
+
+def test_the_corner_is_the_display_the_user_is_actually_at() -> None:
+    """`NSScreen.mainScreen` is the screen with the *key window*.
+
+    An accessory app has none, so it resolves to whichever display the frontmost other
+    application is on — which put ARC in the corner of an external monitor while the user
+    was working on the laptop, with nothing to say it was even running. The cursor is the
+    better answer to which screen someone is at.
+    """
+    source = (ROOT / "arc" / "desktop" / "panel.py").read_text(encoding="utf-8")
+    picker = source[source.index("    def _current_screen") : source.index("    def _corner_frame")]
+    assert "NSEvent.mouseLocation()" in picker
+    assert "NSScreen.screens()" in picker
+    assert "mainScreen()" in picker, "no fallback when the cursor is on no known screen"
+
+
+def test_a_resting_panel_lets_the_pointer_straight_through() -> None:
+    """Whatever is behind ARC in the corner has to stay clickable.
+
+    A parked panel that swallowed clicks would make the top right of the screen a dead
+    zone, which is the opposite of getting out of the way. Only a woken panel takes the
+    mouse.
+    """
+    source = (ROOT / "arc" / "desktop" / "panel.py").read_text(encoding="utf-8")
+    assert "setIgnoresMouseEvents_(bool(muted))" in source
+
+
+def test_the_orb_parts_for_a_cursor_that_comes_very_close() -> None:
+    """The circles nearest the cursor swing aside and hold a gap open around it.
+
+    Because the resting panel is click-through it receives no mouse events of its own, so
+    the position has to come from a screen-space read on the native side.
+    """
+    source = (ROOT / "arc" / "desktop" / "panel.py").read_text(encoding="utf-8")
+    assert "NSEvent.mouseLocation()" in source
+    assert "POINTER_NEAR_PT" in source
+    assert "setPointer(" in source
+
+    bridge = (UI / "panel.js").read_text(encoding="utf-8")
+    assert "setPointer(x, y, near)" in bridge
+    assert "orb.setPointer(" in bridge
+
+    orb = (UI / "orb.js").read_text(encoding="utf-8")
+    assert "setPointer(x, y, near)" in orb
+    # Nothing happens at all until the cursor is close enough to matter.
+    assert "if (near > 0) {" in orb
+
+
+def test_the_orb_never_goes_completely_still() -> None:
+    """A frozen frame reads as crashed. Even resting and silent it keeps breathing."""
+    orb = (UI / "orb.js").read_text(encoding="utf-8")
+    points = orb[orb.index("  _points(cx, cy, radius) {") : orb.index("  _drawSteady(")]
+    assert "breath" in points
+    assert "this.muted ? 0.012 : 0.02" in points, "the wobble can reach zero again"
+
+
 @pytest.mark.parametrize("state", ["centre", "corner"])
-def test_both_geometries_are_defined(state: str) -> None:
+def test_both_page_states_are_defined(state: str) -> None:
+    """`centre` is no longer a place the window goes — it is the arrival cue the page
+    reads on first load, and the page still has to be told it."""
     from arc.desktop import panel
 
     assert state in (panel.CENTRE, panel.CORNER)

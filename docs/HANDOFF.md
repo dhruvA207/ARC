@@ -179,7 +179,7 @@ Without Accessibility, synthetic clicks silently do nothing — they do not erro
 .venv/bin/python -m pytest      # expect 788 passed
 .venv/bin/ruff check .          # expect all checks passed
 .venv/bin/arc doctor            # expect 0 failed
-ARC                             # window opens, prompt returns immediately
+ARC                             # menu bar orb appears, prompt returns immediately
 curl -s http://127.0.0.1:8787/health
 ```
 
@@ -306,7 +306,7 @@ and `messaging` tool modules. 42 tools total.
 ## Commands
 
 ```bash
-ARC                         # launch, and only that: the app window plus the server
+ARC                         # launch, and only that: the menu bar shell (`arc desktop`) plus the server
 arc doctor                  # environment + macOS permission grants
 arc chat                    # REPL; /memory /recall /why /model /tokens
 arc do "<task>"             # multi-step work; --dry-run, --no-server
@@ -326,9 +326,11 @@ arc-kill                    # standalone; works when arc itself does not
 `.venv/bin/arc <subcommand>` from the repo, or with the venv activated. Only `ARC` is
 symlinked onto PATH; `arc` and `arc-kill` live in `.venv/bin/`.
 
-**`ARC` launches detached** — the window opens, the prompt comes straight back, and
-output goes to `~/.arc/logs/ui.log` rather than over your terminal. Closing the terminal
-does not take ARC down. A second `ARC` refuses rather than starting a competing copy.
+**`ARC` launches detached** — the menu bar orb appears, the prompt comes straight back,
+and output goes to `~/.arc/logs/ui.log` rather than over your terminal. Closing the
+terminal does not take ARC down. A second `ARC` refuses rather than starting a competing
+copy. (It runs `arc desktop` now, not `arc ui` — the old app window is still there behind
+`arc ui` if you want it.)
 
 ---
 
